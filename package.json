@@ -1,0 +1,16 @@
+{
+  "name": "cloud-drive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal self-hosted cloud drive: Express + SQLite backend serving a React frontend on one port.",
+  "scripts": {
+    "setup": "npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start",
+    "hash-password": "npm --prefix backend run hash-password --",
+    "test": "npm --prefix backend test",
+    "test:e2e": "npm --prefix e2e test",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "cloud-drive-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/",
+    "hash-password": "node scripts/hash-password.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "busboy": "^1.6.0",
+    "express": "^5.1.0",
+    "mime-types": "^3.0.1",
+    "sharp": "^0.35.4"
+  }
+}
