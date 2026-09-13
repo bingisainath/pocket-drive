@@ -1,20 +1,23 @@
 # Cloud Drive
 
 A minimal, self-hosted Google Drive for an Android phone: upload, browse, preview and download your
-files from any device. One Node.js process serves both the API and the web app on a single port, so
-you can point `tailscale serve` / `tailscale funnel` straight at it.
+files from any device, and share folders with friends. One Node.js process serves both the API and
+the web app on a single port, so you can point `tailscale serve` / `tailscale funnel` straight at it.
 
 - **Upload** by drag-and-drop or file picker, many files at once, with per-file progress, cancel and retry.
   Uploads stream straight to disk (constant memory — a 1 GB file uses ~3 MB of RAM).
 - **Browse** in a thumbnail grid or a list, sorted newest first (or by name, size, or oldest first),
-  with folders, breadcrumbs and search across all folders.
+  with folders, breadcrumbs and search.
 - **Preview** images, video, audio, PDFs and text files in the browser. Swipe or use the arrow keys to
   move between photos.
 - **Delete** files and folders, with a confirmation step.
+- **Share folders with friends** by email. Everyone signs in with Google, and each person gets a role
+  per folder: Viewer, Contributor or Editor. Folders you don't share stay invisible to them.
+- **Owner tools**: see who has access to what, remove people, and review an activity log of sign-ins,
+  uploads, deletes and sharing changes.
 - **Mobile first**: big tap targets, a floating + button, long-press for actions, and the phone's back
   button closes the preview.
-- **Storage meter** showing space used by Drive and space free on the device.
-- **Password gate** stored as a scrypt hash, with an HttpOnly session cookie and login throttling.
+- **Storage meter** (owner only) showing space used by Drive and space free on the device.
 
 ## Quick start (on the phone)
 
@@ -23,24 +26,25 @@ Inside Termux → `proot-distro login debian`, with Node.js ≥ 20.12:
 ```bash
 cd ~/cloud-drive
 npm run setup          # install backend + frontend dependencies
-npm run hash-password  # choose your password (saved as a hash in backend/.env)
+npm run hash-password  # choose the owner's backup password (saved as a hash in backend/.env)
 npm run build          # build the web app into frontend/dist
 npm start              # serve everything on http://127.0.0.1:3000
 ```
 
-Open <http://127.0.0.1:3000> in the phone's browser to check it works.
+Open <http://127.0.0.1:3000> in the phone's browser to check it works. At this point only you can sign
+in, with the password. To let friends in, set up Google sign-in as described below.
 
 ### Access it from anywhere with Tailscale
 
 Run these wherever `tailscaled` is running:
 
 ```bash
-tailscale serve --bg 3000     # private: only devices on your tailnet
-tailscale funnel --bg 3000    # public: anyone with the URL gets the login page
+tailscale serve --bg 3000                # private: only devices on your tailnet
+tailscale funnel --bg --https=8443 3000  # public, on port 8443 (443 and 10000 also work)
 ```
 
-Either way you get `https://<phone-name>.<tailnet>.ts.net`, with HTTPS handled by Tailscale. Stop with
-`tailscale serve reset` or `tailscale funnel reset`.
+You get `https://<phone-name>.<tailnet>.ts.net[:port]`, with HTTPS handled by Tailscale. Stop with
+`tailscale funnel --https=8443 off` or `tailscale serve reset`.
 
 The server listens on `127.0.0.1` by default, so it is only reachable through Tailscale. If you'd rather
 connect to the phone's Tailscale IP directly (`http://100.x.y.z:3000`), set `HOST=0.0.0.0` in
@@ -52,28 +56,101 @@ Android kills background apps aggressively. To keep the server alive:
 
 - Run `termux-wake-lock` in Termux, or tap *Acquire wakelock* in the Termux notification.
 - Turn off battery optimization for Termux in Android settings.
-- Start the server inside `tmux` so it survives closing the terminal: `tmux new -s drive 'npm start'`.
-  Reattach later with `tmux attach -t drive`.
+- Best: run it as a Termux service (`termux-services`), so it restarts on its own when it crashes and
+  whenever Termux starts. A quick alternative is `tmux new -s drive 'npm start'`.
+
+## Sharing with friends (Google sign-in)
+
+### 1. Create a Google OAuth client (free, one time)
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create a project, e.g. "Drive".
+2. Go to **APIs & Services → OAuth consent screen**:
+   - Choose **External**.
+   - Enter an app name and your email.
+   - Keep the default scopes (email, profile, openid).
+   - While the app is in **Testing**, only the Google accounts you add as **test users** can sign in
+     (up to 100). Either add your friends there, or click **Publish app**. Apps that only ask for
+     name and email don't need Google's review.
+3. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+   - **Application type**: Web application.
+   - **Authorized redirect URIs**: your public address followed by `/api/auth/google/callback`, e.g.
+     `https://tailscale-termux.tail790102.ts.net:8443/api/auth/google/callback`. Add
+     `http://localhost:3000/api/auth/google/callback` too if you want Google sign-in on the phone
+     itself.
+   - Copy the **Client ID** and **Client secret**.
+
+### 2. Configure `backend/.env` and restart
+
+```bash
+OWNER_EMAIL=you@gmail.com                                          # your Google account = the owner (admin)
+PUBLIC_ORIGINS=https://tailscale-termux.tail790102.ts.net:8443     # comma-separate to add http://localhost:3000
+GOOGLE_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+```
+
+On startup the log says `Google sign-in: on for https://…`. The sign-in page now offers **Continue
+with Google**. Your password stays available under *Owner? Use your password*, as a backup.
+
+### 3. Share a folder
+
+As the owner, open a folder's **⋮ → Share** (or **Share** in the header), enter your friend's Gmail
+address and pick a role:
+
+| Role            | View & download | Upload & create folders | Delete                              |
+| --------------- | --------------- | ----------------------- | ----------------------------------- |
+| **Viewer**      | ✅              | –                       | –                                   |
+| **Contributor** | ✅              | ✅                      | only what they uploaded themselves  |
+| **Editor**      | ✅              | ✅                      | anything inside the shared folder   |
+| **Owner** (you) | ✅ everywhere   | ✅                      | ✅ (plus sharing, People, Activity) |
+
+Then send them the address (Share → **Copy link**). They sign in with Google and land on **Shared with
+me**, which lists only the folders you shared with them.
+
+How access works:
+
+- **Default deny.** Nothing is visible unless it's shared. Private folders and files answer "not found"
+  to other people, even if they guess a file's link or id. Search, thumbnails and downloads all
+  respect this.
+- **Inheritance.** Sharing a folder covers everything inside it. If several shares apply, the strongest
+  role wins. For example, Viewer on *Trip* plus Contributor on *Trip/Day 1* means they can upload to
+  Day 1 only.
+- **Changes are immediate.** Unsharing, or removing someone under **⋮ → People & access**, takes effect
+  on their very next click. Removing a person also signs them out. Files they added stay, and count as
+  yours.
+- **One Google account per email.** An email stays tied to the first Google account that signed in
+  with it.
+- **Activity log.** **⋮ → Activity** lists sign-ins (including refused ones), uploads, new folders,
+  deletes and sharing changes, kept for `ACTIVITY_RETENTION_DAYS`.
 
 ## Configuration
 
 All settings live in `backend/.env`. `npm run hash-password` creates this file from
 [`backend/.env.example`](backend/.env.example).
 
-| Variable               | Default            | Notes                                                                   |
-| ---------------------- | ------------------ | ----------------------------------------------------------------------- |
-| `PORT`                 | `3000`             |                                                                         |
-| `HOST`                 | `127.0.0.1`        | `0.0.0.0` exposes it on every network interface.                        |
-| `DATA_DIR`             | `~/cloud-storage`  | Holds `files/`, the SQLite index, and the thumbnail cache.              |
-| `STORAGE_DIR`          | `$DATA_DIR/files`  | Where your files actually live (see below).                             |
-| `MAX_UPLOAD_MB`        | `4096`             | Per-file limit.                                                         |
-| `MIN_FREE_MB`          | `500`              | Uploads are refused if they'd leave less than this free on the device. |
-| `SESSION_DAYS`         | `30`               | Sessions extend automatically while you keep using the app.            |
-| `LOGIN_MAX_ATTEMPTS`   | `10`               | Failed logins per IP, per window, before a temporary lockout.           |
-| `LOGIN_WINDOW_MINUTES` | `15`               |                                                                         |
-| `PASSWORD_HASH`        | —                  | Required. Set it with `npm run hash-password`.                          |
+| Variable                  | Default           | Notes                                                                   |
+| ------------------------- | ----------------- | ----------------------------------------------------------------------- |
+| `PORT`                    | `3000`            |                                                                         |
+| `HOST`                    | `127.0.0.1`       | `0.0.0.0` exposes it on every network interface.                        |
+| `DATA_DIR`                | `~/cloud-storage` | Holds `files/`, the SQLite database, and the thumbnail cache.           |
+| `STORAGE_DIR`             | `$DATA_DIR/files` | Where your files actually live (see below).                             |
+| `MAX_UPLOAD_MB`           | `4096`            | Per-file limit.                                                         |
+| `MIN_FREE_MB`             | `500`             | Uploads are refused if they'd leave less than this free on the device. |
+| `SESSION_DAYS`            | `30`              | Sessions extend automatically while you keep using the app.            |
+| `LOGIN_MAX_ATTEMPTS`      | `10`              | Failed password logins per IP, per window, before a temporary lockout.  |
+| `LOGIN_WINDOW_MINUTES`    | `15`              |                                                                         |
+| `PASSWORD_HASH`           | —                 | Required. The owner's backup password; set it with `npm run hash-password`. |
+| `OWNER_EMAIL`             | —                 | Your Google account. Required for Google sign-in.                       |
+| `PUBLIC_ORIGINS`          | —                 | Addresses where Google sign-in is offered (each must match a redirect URI). |
+| `GOOGLE_CLIENT_ID`        | —                 | From your Google OAuth client.                                          |
+| `GOOGLE_CLIENT_SECRET`    | —                 | From your Google OAuth client. Keep it private.                         |
+| `ACTIVITY_RETENTION_DAYS` | `180`             | `0` keeps the activity log forever.                                     |
 
-To change the password, run `npm run hash-password` again and restart. Everyone gets signed out.
+To change the password, run `npm run hash-password` again and restart; the owner is signed out
+everywhere.
+
+**Upgrading from the single-password version:** the first start upgrades the database in place in a
+fraction of a second. Files aren't touched, and existing files count as the owner's. Everyone is signed
+out once.
 
 ## How it works
 
@@ -83,29 +160,34 @@ cloud-drive/
 ├── backend/               # Express 5 API + static file server (plain ESM JavaScript, no build step)
 │   ├── src/
 │   │   ├── server.js      # entry point: config, startup scan, HTTP server
-│   │   ├── app.js         # routes, SPA fallback, error handling
-│   │   ├── routes/        # /api/auth/*, /api/{list,search,upload,folders,files,entries,storage,rescan}
+│   │   ├── app.js         # routes, SPA fallback, error handling, security headers
+│   │   ├── routes/        # auth (password + Google), files (every route permission-checked), admin (owner)
+│   │   ├── access.js      # folder shares and the permission checks built on them
+│   │   ├── users.js       # accounts: the owner and everyone a folder is shared with
+│   │   ├── google.js      # "Sign in with Google" (OpenID Connect with PKCE, state and nonce)
+│   │   ├── activity.js    # the activity log
 │   │   ├── uploads.js     # streaming multipart → temp file → atomic rename
 │   │   ├── scanner.js     # re-syncs the SQLite index with what's on disk
 │   │   ├── thumbnails.js  # sharp → 400px WebP, cached on disk
-│   │   ├── db.js          # SQLite schema + queries (better-sqlite3)
+│   │   ├── db.js          # SQLite schema, migrations + queries (better-sqlite3)
 │   │   ├── auth.js        # scrypt hashing, sessions, login throttling
 │   │   └── paths.js       # filename sanitizing + path traversal protection
 │   ├── scripts/hash-password.js
-│   └── test/api.test.js   # end-to-end API tests (node:test)
-└── frontend/              # React 19 + Vite + TypeScript + Tailwind 4
-    └── src/
-        ├── components/    # Drive (main screen), grid/list views, previewer, dialogs, upload panel
-        ├── hooks/         # upload queue, long-press, URL-synced folder path, overlays
-        └── api.ts         # typed API client (XHR for uploads, to get progress)
+│   └── test/              # API tests + sharing/permission tests (node:test, with a stand-in for Google)
+├── frontend/              # React 19 + Vite + TypeScript + Tailwind 4
+│   └── src/
+│       ├── components/    # Drive, grid/list views, previewer, Share/People/Activity dialogs, upload panel
+│       ├── hooks/         # upload queue, long-press, URL-synced folder path, overlays
+│       └── api.ts         # typed API client (XHR for uploads, to get progress)
+└── e2e/run.mjs            # headless-Chromium end-to-end test
 ```
 
 - **Your files are real files.** A folder in the app is a real folder under `STORAGE_DIR`, and each file
   keeps its own name. You can back up that directory, browse it from Termux, or add files by hand.
-- **SQLite is only an index** of names, sizes, types, upload dates and folder paths, used for fast
-  listing and search. It is re-synced with the disk on every start, and on demand from
-  *⋮ → Sync with disk*. If you delete `cloud-drive.db`, the next start rebuilds it; files found this way
-  use their modification time as the upload date.
+  Permissions live only in the database, and files you add by hand inherit their folder's sharing.
+- **SQLite holds the index plus accounts.** The index covers names, sizes, types, upload dates and
+  folder paths, and is re-synced with the disk on every start and from *⋮ → Sync with disk*. Accounts,
+  shares, sessions and the activity log live alongside it.
 - **Uploads** stream to a hidden temp directory on the same filesystem, then are atomically renamed into
   place. They never overwrite anything: a name clash becomes `photo (1).jpg`. Interrupted uploads are
   cleaned up.
@@ -125,24 +207,23 @@ filesystem's rules.
 ```bash
 npm run dev:backend    # API on :3000, restarts on changes (needs backend/.env)
 npm run dev:frontend   # Vite on :5173 with hot reload, proxies /api to :3000
-npm test               # backend API test suite
+npm test               # backend API + sharing/permission test suites
 ```
 
 ### Browser tests
 
 `e2e/run.mjs` starts the real server with a throwaway data directory on a random port, so it never
-touches your files. It then drives the built app in headless Chromium, at phone and desktop sizes,
-through these flows:
+touches your files. It uses a stand-in for Google, so no real Google account is needed. It then
+drives the built app in headless Chromium, at phone and desktop sizes, through these flows:
 
-- login
-- uploads
-- folders and the back button
+- password and Google sign-in
+- uploads, folders and the back button
 - photo, PDF and text previews, including swiping
-- long-press delete
-- search
+- long-press delete and search
 - list, grid and dark mode
 - drag-and-drop and right-click
-- sign-out
+- sharing a folder, a friend's limited view, and a refused sign-in
+- People & access and Activity
 
 It fails on any console error or CSP violation, and saves screenshots to `e2e/screenshots/`.
 
@@ -157,6 +238,13 @@ npm run test:e2e
 
 - **"PASSWORD_HASH is not set"**: run `npm run hash-password`.
 - **"Frontend not built yet"** at `/`: run `npm run build`, then restart.
+- **No "Continue with Google" button**: check the startup log. `OWNER_EMAIL`, `PUBLIC_ORIGINS` and
+  both Google values must all be set, and you must open the drive at an address listed in
+  `PUBLIC_ORIGINS`.
+- **Google says `redirect_uri_mismatch`**: the redirect URI in Google Cloud must be exactly
+  `<origin from PUBLIC_ORIGINS>/api/auth/google/callback`, including the port.
+- **A friend sees "doesn't have access"**: share a folder with the exact email of the Google account
+  they picked. Also check they're a test user, if the consent screen is still in Testing.
 - **Crash or segfault on startup after changing Node versions**: `better-sqlite3` and `sharp` are
   native modules. Run `npm --prefix backend rebuild`, or delete `backend/node_modules` and run
   `npm run setup` again. `better-sqlite3` is pinned to v11 because v12 and later require Node ≥ 22.
