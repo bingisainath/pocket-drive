@@ -1,9 +1,24 @@
-import { ChevronRight, HardDrive } from 'lucide-react';
+import { ChevronRight, HardDrive, Users } from 'lucide-react';
 import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 
-export function Breadcrumbs({ path, onNavigate }: { path: string; onNavigate: (path: string) => void }) {
-  const parts = path ? path.split('/') : [];
+interface Props {
+  path: string;
+  /**
+   * Folders above this path are hidden (and the root crumb links past them). The owner uses '';
+   * members use the parent of the folder shared with them, so private parents never show.
+   */
+  base: string;
+  /** "My Drive" for the owner, "Shared with me" for everyone else. */
+  shared: boolean;
+  onNavigate: (path: string) => void;
+}
+
+export function Breadcrumbs({ path, base, shared, onNavigate }: Props) {
+  const below = base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : base === path ? '' : path;
+  const parts = below ? below.split('/') : [];
   const nav = useRef<HTMLElement>(null);
+  const rootLabel = shared ? 'Shared with me' : 'My Drive';
+  const RootIcon = shared ? Users : HardDrive;
 
   // Deep paths overflow on phones: keep the current folder in view.
   useEffect(() => {
@@ -16,15 +31,18 @@ export function Breadcrumbs({ path, onNavigate }: { path: string; onNavigate: (p
       aria-label="Folder path"
       className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      <Crumb current={!parts.length} onClick={() => onNavigate('')} label="My Drive">
-        <HardDrive className="size-4 shrink-0" />
+      <Crumb current={!path} onClick={() => onNavigate('')} label={rootLabel}>
+        <RootIcon className="size-4 shrink-0" />
         {/* Inside a folder on phones, the icon alone leaves room for the folder names. */}
-        <span className={parts.length ? 'hidden sm:inline' : ''}>My Drive</span>
+        <span className={parts.length ? 'hidden sm:inline' : ''}>{rootLabel}</span>
       </Crumb>
       {parts.map((name, i) => (
         <Fragment key={i}>
           <ChevronRight className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-          <Crumb current={i === parts.length - 1} onClick={() => onNavigate(parts.slice(0, i + 1).join('/'))}>
+          <Crumb
+            current={i === parts.length - 1}
+            onClick={() => onNavigate([base, ...parts.slice(0, i + 1)].filter(Boolean).join('/'))}
+          >
             <span className="max-w-48 truncate">{name}</span>
           </Crumb>
         </Fragment>

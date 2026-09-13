@@ -2,7 +2,7 @@ import { formatBytes } from '../lib/format';
 import type { StorageInfo } from '../types';
 
 /** Drive's share of the device, other apps' share, and what's free — as one bar. */
-export function StorageMeter({ info, className = '' }: { info: StorageInfo | null; className?: string }) {
+export function StorageMeter({ info, className = '' }: { info: Required<StorageInfo> | null; className?: string }) {
   if (!info) return <div className={`h-9 ${className}`} />;
   const { usedBytes, diskTotalBytes, diskFreeBytes } = info;
   const other = Math.max(0, diskTotalBytes - diskFreeBytes - usedBytes);

@@ -1,4 +1,4 @@
-import { Download, Eye, FolderInput, FolderOpen, Trash2, type LucideIcon } from 'lucide-react';
+import { Download, Eye, FolderInput, FolderOpen, Share2, Trash2, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { urls } from '../api';
 import { locationOf } from '../lib/entries';
@@ -13,13 +13,17 @@ import { Spinner, btn } from './ui';
 interface ActionSheetProps {
   entry: Entry;
   showLocation: boolean;
+  /** The owner may share folders. */
+  canShare: boolean;
+  meEmail: string;
   onClose: () => void;
   onOpen: (entry: Entry) => void;
   onReveal: (entry: Entry) => void;
+  onShare: (entry: Entry) => void;
   onDelete: (entry: Entry) => void;
 }
 
-export function ActionSheet({ entry, showLocation, onClose, onOpen, onReveal, onDelete }: ActionSheetProps) {
+export function ActionSheet({ entry, showLocation, canShare, meEmail, onClose, onOpen, onReveal, onShare, onDelete }: ActionSheetProps) {
   const then = (fn: (e: Entry) => void) => () => {
     onClose();
     fn(entry);
@@ -27,6 +31,7 @@ export function ActionSheet({ entry, showLocation, onClose, onOpen, onReveal, on
   const meta = entry.isDir
     ? `Folder${entry.childCount === null ? '' : ` · ${plural(entry.childCount, 'item')}`}`
     : `${formatBytes(entry.size)} · ${formatDateTime(entry.createdAt)}`;
+  const addedBy = entry.uploadedBy && entry.uploadedBy !== meEmail ? entry.uploadedBy : null;
 
   return (
     <Modal label={entry.name} onClose={onClose}>
@@ -37,6 +42,7 @@ export function ActionSheet({ entry, showLocation, onClose, onOpen, onReveal, on
         <div className="min-w-0">
           <p className="truncate font-medium">{entry.name}</p>
           <p className="truncate text-sm text-slate-500 dark:text-slate-400">{meta}</p>
+          {addedBy && <p className="truncate text-xs text-slate-500 dark:text-slate-400">Added by {addedBy}</p>}
         </div>
       </div>
       <div className="p-2">
@@ -48,14 +54,21 @@ export function ActionSheet({ entry, showLocation, onClose, onOpen, onReveal, on
             Download
           </SheetButton>
         )}
+        {canShare && entry.isDir && (
+          <SheetButton icon={Share2} onClick={then(onShare)}>
+            Share{entry.sharedWith ? ` · ${entry.sharedWith === 1 ? '1 person' : `${entry.sharedWith} people`}` : ''}
+          </SheetButton>
+        )}
         {showLocation && (
           <SheetButton icon={FolderInput} onClick={then(onReveal)}>
             Show in {locationOf(entry)}
           </SheetButton>
         )}
-        <SheetButton icon={Trash2} danger onClick={then(onDelete)}>
-          Delete
-        </SheetButton>
+        {entry.canDelete && (
+          <SheetButton icon={Trash2} danger onClick={then(onDelete)}>
+            Delete
+          </SheetButton>
+        )}
       </div>
     </Modal>
   );
@@ -124,6 +137,7 @@ export function ConfirmDelete({ entry, onCancel, onConfirm }: { entry: Entry; on
               ? ` and everything inside it (${plural(count, 'item')}) will be permanently deleted.`
               : ' will be permanently deleted.'
             : ' will be permanently deleted.'}{' '}
+          {entry.sharedWith ? 'Everyone it’s shared with loses access. ' : ''}
           This can’t be undone.
         </p>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

@@ -78,9 +78,11 @@ export function PreviewModal({ entry, siblings, onClose, onNavigate, onDelete }:
         <a href={urls.download(entry)} download aria-label="Download" className={darkBtn}>
           <Download className="size-5" />
         </a>
-        <button type="button" onClick={() => onDelete(entry)} aria-label="Delete" className={darkBtn}>
-          <Trash2 className="size-5" />
-        </button>
+        {entry.canDelete && (
+          <button type="button" onClick={() => onDelete(entry)} aria-label="Delete" className={darkBtn}>
+            <Trash2 className="size-5" />
+          </button>
+        )}
       </header>
 
       {/* touch-action: we handle horizontal swipes, so the browser mustn't treat them as "go back". */}

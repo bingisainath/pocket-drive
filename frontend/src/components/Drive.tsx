@@ -1,4 +1,4 @@
-import { CloudUpload, FolderPlus, Plus, Upload, type LucideIcon } from 'lucide-react';
+import { CloudUpload, FolderPlus, Plus, Share2, Upload, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type ApiError } from '../api';
 import { useFolderPath } from '../hooks/useFolderPath';
@@ -7,21 +7,27 @@ import { useToasts } from '../hooks/useToasts';
 import { useUploads } from '../hooks/useUploads';
 import { SORTS, sortEntries, type SortOrder } from '../lib/entries';
 import { plural } from '../lib/format';
-import type { Entry, StorageInfo } from '../types';
+import { parentOf } from '../lib/people';
+import type { Entry, FolderAccess, StorageInfo, User } from '../types';
+import { ActivityDialog } from './ActivityDialog';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ActionSheet, ConfirmDelete, NewFolderDialog } from './Dialogs';
 import { GridView, ListView } from './EntryViews';
 import { Menu, SearchBox, SortSelect, VIEWS, ViewToggle, type View } from './HeaderControls';
+import { PeopleDialog } from './PeopleDialog';
 import { PreviewModal } from './PreviewModal';
+import { ShareDialog } from './ShareDialog';
 import { EmptyState, ErrorState, Skeleton } from './States';
 import { StorageMeter } from './StorageMeter';
 import { ToastStack } from './ToastStack';
 import { UploadPanel } from './UploadPanel';
 import { Logo, btn } from './ui';
 
-export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
+export default function Drive({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
+  const isOwner = user.isOwner;
   const [folder, navigate] = useFolderPath();
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [access, setAccess] = useState<FolderAccess | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState('');
@@ -33,6 +39,9 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
   const [actionsFor, setActionsFor] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState<Entry | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [sharing, setSharing] = useState<string | null>(null);
+  const [showPeople, setShowPeople] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const { toasts, toast, dismiss } = useToasts();
@@ -41,6 +50,8 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
 
   const trimmed = query.trim();
   const searching = trimmed !== '';
+  const canWrite = Boolean(access?.canWrite);
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   // --- Data ---
 
@@ -61,12 +72,14 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
     setLoadError(null);
     api.list(folder).then(
       (res) => {
-        if (!stale) setEntries(res.entries);
+        if (stale) return;
+        setEntries(res.entries);
+        setAccess(res.access);
       },
       (err: ApiError) => {
         if (stale) return;
         if (err.status === 404 && folder) {
-          toast('That folder no longer exists', 'error');
+          toast('That folder isn’t available', 'error');
           navigate('', { replace: true });
         } else {
           setLoadError(err.message);
@@ -128,13 +141,19 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
 
   const startUpload = useCallback(
     (list: File[]) => {
-      if (list.length) addUploads(list, folder, storage?.maxUploadBytes ?? Number.POSITIVE_INFINITY);
+      if (!list.length) return;
+      if (!canWrite) {
+        toast('You can’t add files to this folder', 'error');
+        return;
+      }
+      addUploads(list, folder, storage?.maxUploadBytes ?? Number.POSITIVE_INFINITY);
     },
-    [addUploads, folder, storage],
+    [addUploads, folder, storage, canWrite, toast],
   );
   const pickFiles = () => fileInput.current?.click();
 
-  // Drag-and-drop anywhere on the page (desktop).
+  // Drag-and-drop anywhere on the page (desktop). Always swallow file drops so the browser
+  // doesn't navigate away to the dropped file, even where uploading isn't allowed.
   useEffect(() => {
     let depth = 0;
     const hasFiles = (e: DragEvent) => Boolean(e.dataTransfer?.types.includes('Files'));
@@ -142,12 +161,12 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
       if (!hasFiles(e)) return;
       e.preventDefault();
       depth++;
-      setDragging(true);
+      if (canWrite) setDragging(true);
     };
     const onOver = (e: DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
-      e.dataTransfer!.dropEffect = 'copy';
+      e.dataTransfer!.dropEffect = canWrite ? 'copy' : 'none';
     };
     const onLeave = (e: DragEvent) => {
       if (!hasFiles(e)) return;
@@ -183,7 +202,7 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
       window.removeEventListener('dragleave', onLeave);
       window.removeEventListener('drop', onDrop);
     };
-  }, [startUpload, toast]);
+  }, [startUpload, toast, canWrite]);
 
   // --- Preview (gets its own history entry so the phone's back button closes it) ---
 
@@ -254,7 +273,7 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
     try {
       const r = await api.rescan();
       toast(r.added + r.updated + r.removed ? `Synced: ${r.added} added, ${r.updated} changed, ${r.removed} removed` : 'Already in sync with disk', 'success');
-      setReloadKey((k) => k + 1);
+      reload();
       refreshStorage();
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -269,13 +288,26 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
   // --- Render ---
 
   let content: ReactNode;
-  if (!searching && loadError) content = <ErrorState message={loadError} onRetry={() => setReloadKey((k) => k + 1)} />;
+  if (!searching && loadError) content = <ErrorState message={loadError} onRetry={reload} />;
   else if (searching ? results === null : entries === null) content = <Skeleton view={view} />;
-  else if (!shown.length) content = <EmptyState query={searching ? trimmed : null} onUpload={pickFiles} />;
-  else {
+  else if (!shown.length) {
+    content = (
+      <EmptyState
+        query={searching ? trimmed : null}
+        sharedRoot={Boolean(access?.sharedRoot)}
+        canWrite={canWrite}
+        onUpload={pickFiles}
+      />
+    );
+  } else {
     const viewProps = { entries: shown, showLocation: searching, onOpen: open, onActions: setActionsFor };
     content = view === 'grid' ? <GridView {...viewProps} /> : <ListView {...viewProps} />;
   }
+
+  // Members' breadcrumbs start at the folder shared with them; its (private) parents never show.
+  const crumbBase = isOwner || !access?.accessRoot ? '' : parentOf(access.accessRoot);
+  const canShareHere = isOwner && folder !== '' && !searching;
+  const ownerStorage = isOwner && storage?.diskTotalBytes !== undefined ? (storage as Required<StorageInfo>) : null;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -287,7 +319,7 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
               setQuery('');
               navigate('');
             }}
-            aria-label="My Drive"
+            aria-label={isOwner ? 'My Drive' : 'Shared with me'}
             className="flex shrink-0 items-center gap-2 rounded-xl p-1 transition hover:bg-slate-200/60 dark:hover:bg-slate-800"
           >
             <Logo className="size-9" />
@@ -295,16 +327,39 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
           </button>
           <SearchBox value={query} onChange={setQuery} />
           <div className="hidden shrink-0 items-center gap-2 sm:flex">
-            <button type="button" className={btn.secondary} onClick={() => setCreatingFolder(true)} aria-label="New folder">
-              <FolderPlus className="size-5" />
-              <span className="hidden lg:inline">New folder</span>
-            </button>
-            <button type="button" className={btn.primary} onClick={pickFiles}>
-              <Upload className="size-5" />
-              Upload
-            </button>
+            {canShareHere && (
+              <button type="button" className={btn.secondary} onClick={() => setSharing(folder)} aria-label="Share this folder">
+                <Share2 className="size-5" />
+                <span className="hidden lg:inline">Share</span>
+              </button>
+            )}
+            {canWrite && (
+              <>
+                <button type="button" className={btn.secondary} onClick={() => setCreatingFolder(true)} aria-label="New folder">
+                  <FolderPlus className="size-5" />
+                  <span className="hidden lg:inline">New folder</span>
+                </button>
+                <button type="button" className={btn.primary} onClick={pickFiles}>
+                  <Upload className="size-5" />
+                  Upload
+                </button>
+              </>
+            )}
           </div>
-          <Menu onRescan={rescan} onSignOut={signOut} />
+          <Menu
+            user={user}
+            onSignOut={signOut}
+            owner={
+              isOwner
+                ? {
+                    onShareFolder: canShareHere ? () => setSharing(folder) : null,
+                    onPeople: () => setShowPeople(true),
+                    onActivity: () => setShowActivity(true),
+                    onRescan: rescan,
+                  }
+                : null
+            }
+          />
         </div>
         <div className="mx-auto flex max-w-7xl items-center gap-1 px-3 py-2 sm:px-6">
           {searching ? (
@@ -312,7 +367,7 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
               {results === null ? 'Searching…' : `${plural(results.length, 'result')} for “${trimmed}”`}
             </p>
           ) : (
-            <Breadcrumbs path={folder} onNavigate={navigate} />
+            <Breadcrumbs path={folder} base={crumbBase} shared={!isOwner} onNavigate={navigate} />
           )}
           <SortSelect value={sort} onChange={setSort} />
           <ViewToggle value={view} onChange={setView} />
@@ -320,46 +375,48 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-3 pt-4 pb-40 sm:px-6">
-        <StorageMeter info={storage} className="mb-5 sm:max-w-sm" />
+        {isOwner && <StorageMeter info={ownerStorage} className="mb-5 sm:max-w-sm" />}
         {content}
       </main>
 
       {/* Bottom-right stack: floating action button (phones) above the upload progress panel. */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col items-end gap-3 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
-        <div className="pointer-events-auto relative sm:hidden">
-          {fabOpen && (
-            <>
-              <div className="fixed inset-0 animate-fade-in bg-slate-950/20" onClick={() => setFabOpen(false)} />
-              <div className="absolute right-0 bottom-20 flex animate-sheet-up flex-col items-end gap-3">
-                <FabAction
-                  icon={FolderPlus}
-                  label="New folder"
-                  onClick={() => {
-                    setFabOpen(false);
-                    setCreatingFolder(true);
-                  }}
-                />
-                <FabAction
-                  icon={Upload}
-                  label="Upload files"
-                  onClick={() => {
-                    setFabOpen(false);
-                    pickFiles();
-                  }}
-                />
-              </div>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setFabOpen((o) => !o)}
-            aria-label={fabOpen ? 'Close menu' : 'Upload or create'}
-            aria-expanded={fabOpen}
-            className="relative flex size-16 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/30 transition active:scale-95"
-          >
-            <Plus className={`size-7 transition-transform duration-200 ${fabOpen ? 'rotate-45' : ''}`} />
-          </button>
-        </div>
+        {canWrite && (
+          <div className="pointer-events-auto relative sm:hidden">
+            {fabOpen && (
+              <>
+                <div className="fixed inset-0 animate-fade-in bg-slate-950/20" onClick={() => setFabOpen(false)} />
+                <div className="absolute right-0 bottom-20 flex animate-sheet-up flex-col items-end gap-3">
+                  <FabAction
+                    icon={FolderPlus}
+                    label="New folder"
+                    onClick={() => {
+                      setFabOpen(false);
+                      setCreatingFolder(true);
+                    }}
+                  />
+                  <FabAction
+                    icon={Upload}
+                    label="Upload files"
+                    onClick={() => {
+                      setFabOpen(false);
+                      pickFiles();
+                    }}
+                  />
+                </div>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setFabOpen((o) => !o)}
+              aria-label={fabOpen ? 'Close menu' : 'Upload or create'}
+              aria-expanded={fabOpen}
+              className="relative flex size-16 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/30 transition active:scale-95"
+            >
+              <Plus className={`size-7 transition-transform duration-200 ${fabOpen ? 'rotate-45' : ''}`} />
+            </button>
+          </div>
+        )}
         <UploadPanel items={uploadItems} onCancel={uploads.cancel} onRetry={uploads.retry} onClear={clearFinished} />
       </div>
 
@@ -391,14 +448,31 @@ export default function Drive({ onSignedOut }: { onSignedOut: () => void }) {
         <ActionSheet
           entry={actionsFor}
           showLocation={searching}
+          canShare={isOwner}
+          meEmail={user.email}
           onClose={() => setActionsFor(null)}
           onOpen={open}
           onReveal={reveal}
+          onShare={(entry) => setSharing(entry.path)}
           onDelete={setDeleting}
         />
       )}
       {deleting && <ConfirmDelete entry={deleting} onCancel={() => setDeleting(null)} onConfirm={() => removeEntry(deleting)} />}
       {creatingFolder && <NewFolderDialog onClose={() => setCreatingFolder(false)} onCreate={createFolder} />}
+      {sharing !== null && <ShareDialog folder={sharing} onClose={() => setSharing(null)} onChanged={reload} toast={toast} />}
+      {showPeople && (
+        <PeopleDialog
+          onClose={() => setShowPeople(false)}
+          onChanged={reload}
+          toast={toast}
+          onOpenFolder={(path) => {
+            setShowPeople(false);
+            setQuery('');
+            navigate(path);
+          }}
+        />
+      )}
+      {showActivity && <ActivityDialog onClose={() => setShowActivity(false)} />}
       <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   );

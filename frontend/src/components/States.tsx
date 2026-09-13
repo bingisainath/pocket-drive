@@ -1,4 +1,4 @@
-import { CircleAlert, CloudUpload, SearchX, Upload } from 'lucide-react';
+import { CircleAlert, CloudUpload, FolderOpen, SearchX, Upload, Users } from 'lucide-react';
 import type { View } from './HeaderControls';
 import { btn } from './ui';
 
@@ -22,14 +22,34 @@ export function Skeleton({ view }: { view: View }) {
   );
 }
 
-export function EmptyState({ query, onUpload }: { query: string | null; onUpload: () => void }) {
+interface EmptyProps {
+  query: string | null;
+  /** A member's "Shared with me" page. */
+  sharedRoot: boolean;
+  canWrite: boolean;
+  onUpload: () => void;
+}
+
+export function EmptyState({ query, sharedRoot, canWrite, onUpload }: EmptyProps) {
   if (query) {
     return (
-      <div className="flex flex-col items-center py-20 text-center">
-        <SearchX className="size-12 text-slate-300 dark:text-slate-700" />
-        <p className="mt-4 font-medium">No matches</p>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Nothing is named like “{query}”.</p>
-      </div>
+      <Message icon={<SearchX className="size-12 text-slate-300 dark:text-slate-700" />} title="No matches">
+        Nothing you can see is named like “{query}”.
+      </Message>
+    );
+  }
+  if (sharedRoot) {
+    return (
+      <Message icon={<Users className="size-12 text-slate-300 dark:text-slate-700" />} title="Nothing shared with you yet">
+        When the owner shares a folder with you, it shows up here.
+      </Message>
+    );
+  }
+  if (!canWrite) {
+    return (
+      <Message icon={<FolderOpen className="size-12 text-slate-300 dark:text-slate-700" />} title="This folder is empty">
+        Nothing has been added here yet.
+      </Message>
     );
   }
   return (
@@ -46,6 +66,16 @@ export function EmptyState({ query, onUpload }: { query: string | null; onUpload
         <Upload className="size-5" />
         Upload files
       </button>
+    </div>
+  );
+}
+
+function Message({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center px-6 py-20 text-center">
+      {icon}
+      <p className="mt-4 font-medium">{title}</p>
+      <p className="mt-1 max-w-xs text-sm text-slate-500 dark:text-slate-400">{children}</p>
     </div>
   );
 }

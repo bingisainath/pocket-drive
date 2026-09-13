@@ -1,8 +1,9 @@
-import { EllipsisVertical } from 'lucide-react';
+import { EllipsisVertical, Users } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useLongPress } from '../hooks/useLongPress';
 import { locationOf } from '../lib/entries';
 import { formatBytes, formatDate, plural } from '../lib/format';
+import { peopleCount } from '../lib/people';
 import type { Entry } from '../types';
 import { FileIcon, Thumb } from './FileIcon';
 
@@ -25,6 +26,17 @@ function describe(entry: Entry, showLocation: boolean) {
       : plural(entry.childCount, 'item')
     : `${formatBytes(entry.size)} · ${formatDate(entry.createdAt)}`;
   return showLocation ? `${locationOf(entry)} · ${detail}` : detail;
+}
+
+/** Owner's hint that a folder is shared. */
+function SharedBadge({ entry }: { entry: Entry }) {
+  if (!entry.sharedWith) return null;
+  const label = `Shared with ${peopleCount(entry.sharedWith)}`;
+  return (
+    <span title={label} className="inline-flex shrink-0 text-blue-600 dark:text-blue-400">
+      <Users className="size-3.5" aria-label={label} />
+    </span>
+  );
 }
 
 /** Tap/Enter opens; long-press, right-click or the ⋮ button opens the actions sheet. */
@@ -55,8 +67,7 @@ function MoreButton({ entry, onActions, className = '' }: { entry: Entry; onActi
         e.stopPropagation();
         onActions(entry);
       }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()} // don't start the card's long-press
       className={`flex size-10 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700/60 dark:hover:text-white ${className}`}
     >
       <EllipsisVertical className="size-5" />
@@ -106,7 +117,10 @@ function FolderTile(props: ItemProps) {
       <FileIcon entry={entry} className="size-7 shrink-0" />
       <div className="min-w-0 flex-1">
         {/* Two lines, not truncation: phone tiles are narrow and folder names are what you scan for. */}
-        <p className="line-clamp-2 text-sm font-medium break-words">{entry.name}</p>
+        <p className="flex items-start gap-1 text-sm font-medium">
+          <span className="line-clamp-2 break-words">{entry.name}</span>
+          <SharedBadge entry={entry} />
+        </p>
         <p className="truncate text-xs text-slate-500 dark:text-slate-400">{describe(entry, showLocation)}</p>
       </div>
       <MoreButton entry={entry} onActions={onActions} />
@@ -167,7 +181,10 @@ function ListRow(props: ItemProps) {
         <Thumb entry={entry} iconClassName="size-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{entry.name}</p>
+        <p className="flex items-center gap-1.5 text-sm font-medium">
+          <span className="truncate">{entry.name}</span>
+          <SharedBadge entry={entry} />
+        </p>
         <p className="truncate text-xs text-slate-500 md:hidden dark:text-slate-400">{describe(entry, showLocation)}</p>
         {showLocation && (
           <p className="hidden truncate text-xs text-slate-500 md:block dark:text-slate-400">{locationOf(entry)}</p>

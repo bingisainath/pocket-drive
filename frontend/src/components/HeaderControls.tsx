@@ -1,7 +1,21 @@
-import { ArrowDownUp, EllipsisVertical, LayoutGrid, List, LogOut, RefreshCw, Search, X, type LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import {
+  ArrowDownUp,
+  EllipsisVertical,
+  History,
+  LayoutGrid,
+  List,
+  LogOut,
+  RefreshCw,
+  Search,
+  Share2,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SORTS, SORT_LABELS, type SortOrder } from '../lib/entries';
-import { btn } from './ui';
+import type { User } from '../types';
+import { Avatar, btn } from './ui';
 
 export const VIEWS = ['grid', 'list'] as const;
 export type View = (typeof VIEWS)[number];
@@ -78,7 +92,15 @@ export function ViewToggle({ value, onChange }: { value: View; onChange: (value:
   );
 }
 
-export function Menu({ onRescan, onSignOut }: { onRescan: () => void; onSignOut: () => void }) {
+export interface OwnerMenuActions {
+  onShareFolder: (() => void) | null;
+  onPeople: () => void;
+  onActivity: () => void;
+  onRescan: () => void;
+}
+
+/** Account menu: who you're signed in as, the owner's admin tools, and sign-out. */
+export function Menu({ user, owner, onSignOut }: { user: User; owner: OwnerMenuActions | null; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -96,54 +118,84 @@ export function Menu({ onRescan, onSignOut }: { onRescan: () => void; onSignOut:
     };
   }, [open]);
 
-  const item =
-    'flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800';
+  const choose = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+
   return (
     <div ref={root} className="relative shrink-0">
       <button
         type="button"
-        className={btn.icon}
-        aria-label="More options"
+        className={`${btn.icon} overflow-hidden`}
+        aria-label="Account and options"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <EllipsisVertical className="size-5" />
+        {user.picture ? (
+          <Avatar email={user.email} name={user.name} picture={user.picture} className="size-8" />
+        ) : (
+          <EllipsisVertical className="size-5" />
+        )}
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute top-full right-0 z-40 mt-1 w-60 animate-fade-in rounded-xl bg-white p-1.5 shadow-xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10"
+          className="absolute top-full right-0 z-40 mt-1 w-72 animate-fade-in rounded-xl bg-white p-1.5 shadow-xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10"
         >
-          <button
-            type="button"
-            role="menuitem"
-            className={item}
-            onClick={() => {
-              setOpen(false);
-              onRescan();
-            }}
-          >
-            <RefreshCw className="size-4 text-slate-500" />
-            <span>
-              Sync with disk
-              <span className="block text-xs text-slate-500">Pick up files added outside the app</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={item}
-            onClick={() => {
-              setOpen(false);
-              onSignOut();
-            }}
-          >
-            <LogOut className="size-4 text-slate-500" />
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <Avatar email={user.email} name={user.name} picture={user.picture} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                {user.isOwner ? 'Owner · ' : ''}
+                {user.email}
+              </p>
+            </div>
+          </div>
+          <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+          {owner && (
+            <>
+              {owner.onShareFolder && (
+                <MenuItem icon={Share2} onClick={choose(owner.onShareFolder)}>
+                  Share this folder
+                </MenuItem>
+              )}
+              <MenuItem icon={Users} onClick={choose(owner.onPeople)}>
+                People &amp; access
+              </MenuItem>
+              <MenuItem icon={History} onClick={choose(owner.onActivity)}>
+                Activity
+              </MenuItem>
+              <MenuItem icon={RefreshCw} onClick={choose(owner.onRescan)} hint="Pick up files added outside the app">
+                Sync with disk
+              </MenuItem>
+              <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+            </>
+          )}
+          <MenuItem icon={LogOut} onClick={choose(onSignOut)}>
             Sign out
-          </button>
+          </MenuItem>
         </div>
       )}
     </div>
+  );
+}
+
+function MenuItem({ icon: Icon, onClick, hint, children }: { icon: LucideIcon; onClick: () => void; hint?: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800"
+    >
+      <Icon className="size-4 shrink-0 text-slate-500" />
+      <span>
+        {children}
+        {hint && <span className="block text-xs text-slate-500">{hint}</span>}
+      </span>
+    </button>
   );
 }

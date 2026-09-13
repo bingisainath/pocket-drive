@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, RotateCw, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { UploadItem } from '../hooks/useUploads';
 import { formatBytes, plural } from '../lib/format';
 import { FileIcon } from './FileIcon';
@@ -14,11 +14,18 @@ interface Props {
 
 export function UploadPanel({ items, onCancel, onRetry, onClear }: Props) {
   const [expanded, setExpanded] = useState(true);
-  if (!items.length) return null;
-
   const active = items.filter((i) => i.status === 'queued' || i.status === 'uploading');
   const done = items.filter((i) => i.status === 'done').length;
   const failed = items.filter((i) => i.status === 'error').length;
+  const busy = active.length > 0;
+
+  // Show the details while uploading (or when something failed, to retry). Once everything is
+  // through, shrink to the summary line so the panel stops covering the photos just added.
+  useEffect(() => {
+    setExpanded(busy || failed > 0);
+  }, [busy, failed]);
+
+  if (!items.length) return null;
   const total = active.reduce((sum, i) => sum + i.file.size, 0);
   const loaded = active.reduce((sum, i) => sum + i.loaded, 0);
   const percent = total ? Math.round((loaded / total) * 100) : 0;

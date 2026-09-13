@@ -1,4 +1,4 @@
-import type { Entry, StorageInfo } from './types';
+import type { ActivityItem, Entry, FolderAccess, Me, Person, Role, Share, StorageInfo } from './types';
 
 export class ApiError extends Error {
   status: number;
@@ -11,7 +11,7 @@ export class ApiError extends Error {
 export class UploadCancelled extends Error {}
 
 let unauthorizedHandler = () => {};
-/** Called whenever the server says the session is gone (expired, signed out elsewhere, password changed). */
+/** Called whenever the server says the session is gone (expired, signed out elsewhere, access removed). */
 export function onUnauthorized(handler: () => void) {
   unauthorizedHandler = handler;
 }
@@ -44,10 +44,11 @@ async function request<T>(
 const enc = encodeURIComponent;
 
 export const api = {
-  me: () => request<{ authenticated: boolean }>('GET', '/api/auth/me'),
+  me: () => request<Me>('GET', '/api/auth/me'),
   login: (password: string) => request<void>('POST', '/api/auth/login', { body: { password } }),
   logout: () => request<void>('POST', '/api/auth/logout'),
-  list: (path: string) => request<{ path: string; entries: Entry[] }>('GET', `/api/list?path=${enc(path)}`),
+  list: (path: string) =>
+    request<{ path: string; entries: Entry[]; access: FolderAccess }>('GET', `/api/list?path=${enc(path)}`),
   search: (text: string, signal?: AbortSignal) =>
     request<{ entries: Entry[] }>('GET', `/api/search?q=${enc(text)}`, { signal }),
   createFolder: (parentPath: string, name: string) =>
@@ -55,6 +56,19 @@ export const api = {
   remove: (id: number) => request<{ deleted: number }>('DELETE', `/api/entries/${id}`),
   storage: () => request<StorageInfo>('GET', '/api/storage'),
   rescan: () => request<{ added: number; updated: number; removed: number }>('POST', '/api/rescan'),
+
+  /** Owner only. */
+  admin: {
+    shares: (path: string) =>
+      request<{ path: string; direct: Share[]; inherited: Share[] }>('GET', `/api/admin/shares?path=${enc(path)}`),
+    share: (path: string, email: string, role: Role) =>
+      request<Share>('POST', '/api/admin/shares', { body: { path, email, role } }),
+    unshare: (id: number) => request<{ ok: true }>('DELETE', `/api/admin/shares/${id}`),
+    people: () => request<{ users: Person[] }>('GET', '/api/admin/users'),
+    removePerson: (id: number) => request<{ ok: true }>('DELETE', `/api/admin/users/${id}`),
+    activity: (before?: number) =>
+      request<{ items: ActivityItem[] }>('GET', `/api/admin/activity?limit=50${before ? `&before=${before}` : ''}`),
+  },
 };
 
 export const urls = {
@@ -62,6 +76,13 @@ export const urls = {
   download: (e: Entry) => `/api/files/${e.id}/download`,
   thumb: (e: Entry) => `/api/files/${e.id}/thumb`,
 };
+
+/** Starts "Sign in with Google" from this address, coming back to `returnTo` afterwards. */
+export const googleSignInUrl = (returnTo: string) =>
+  `/api/auth/google/start?origin=${enc(window.location.origin)}&returnTo=${enc(returnTo)}`;
+
+/** A link that opens a folder in the drive (people still need access to see it). */
+export const folderLink = (path: string) => `${window.location.origin}/?p=${enc(path).replace(/%2F/g, '/')}`;
 
 /** Upload one file with progress (fetch can't report upload progress, XHR can). */
 export function uploadFile(file: File, folder: string, onProgress: (loaded: number) => void) {
