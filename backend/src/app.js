@@ -2,16 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { requireAuth } from './auth.js';
+import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
 
 // Defense in depth for the web app: only same-origin code runs. ('wasm-unsafe-eval' is for pdf.js's
-// image decoders; inline styles are React `style` props.)
+// image decoders; inline styles are React `style` props; googleusercontent.com serves profile photos.)
 const APP_CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://*.googleusercontent.com",
   "media-src 'self' blob:",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
@@ -39,6 +40,7 @@ export function createApp(ctx) {
   // --- API ---
   app.use('/api', express.json({ limit: '32kb' }));
   app.use('/api/auth', authRoutes(ctx));
+  app.use('/api/admin', requireAuth(ctx), adminRoutes(ctx));
   app.use('/api', requireAuth(ctx), fileRoutes(ctx));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 

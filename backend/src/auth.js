@@ -73,41 +73,47 @@ export function createLoginLimiter({ maxAttempts, windowMs }) {
   };
 }
 
-// --- Sessions (random token in cookie, SHA-256 of it in SQLite) ---
+// --- Sessions (random token in cookie, SHA-256 of it in SQLite, tied to a user) ---
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 export function createSessionStore(db, ttlMs) {
   const q = {
-    insert: db.prepare('INSERT INTO sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)'),
-    get: db.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?'),
+    insert: db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'),
+    get: db.prepare(`
+      SELECT s.expires_at, u.id, u.email, u.name, u.picture, u.is_owner
+      FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`),
     extend: db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?'),
     delete: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
-    deleteAll: db.prepare('DELETE FROM sessions'),
+    deleteOwners: db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE is_owner = 1)'),
     prune: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     getMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
     setMeta: db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'),
   };
 
   return {
-    create() {
+    create(userId) {
       const token = crypto.randomBytes(32).toString('base64url');
       const now = Date.now();
-      q.insert.run(sha256(token), now, now + ttlMs);
+      q.insert.run(sha256(token), userId, now, now + ttlMs);
       return token;
     },
-    /** Returns null if invalid, otherwise { renewed } — sessions slide forward once half their TTL is used. */
+    /**
+     * Returns null if invalid, otherwise { user, renewed }. Sessions slide forward once half their
+     * TTL is used. The user is looked up fresh every time, so removing someone signs them out at once.
+     */
     validate(token) {
       if (typeof token !== 'string' || token.length > 128) return null;
       const hash = sha256(token);
       const row = q.get.get(hash);
       const now = Date.now();
       if (!row || row.expires_at <= now) return null;
-      if (row.expires_at - now < ttlMs / 2) {
+      const { expires_at: expiresAt, ...user } = row;
+      if (expiresAt - now < ttlMs / 2) {
         q.extend.run(now + ttlMs, hash);
-        return { renewed: true };
+        return { user, renewed: true };
       }
-      return { renewed: false };
+      return { user, renewed: false };
     },
     destroy(token) {
       if (typeof token === 'string') q.delete.run(sha256(token));
@@ -115,12 +121,12 @@ export function createSessionStore(db, ttlMs) {
     prune() {
       q.prune.run(Date.now());
     },
-    /** Sign everyone out if PASSWORD_HASH changed since the last start. */
+    /** Sign the owner out everywhere if PASSWORD_HASH changed since the last start. */
     resetIfPasswordChanged(passwordHash) {
       const fingerprint = sha256(passwordHash);
       const previous = q.getMeta.get('password_fingerprint')?.value;
       if (previous !== fingerprint) {
-        q.deleteAll.run();
+        q.deleteOwners.run();
         q.setMeta.run('password_fingerprint', fingerprint);
       }
     },
@@ -147,12 +153,18 @@ export function clearSessionCookie(req, res) {
   res.clearCookie(SESSION_COOKIE, cookieOptions(req));
 }
 
+/** Rejects requests without a valid session; otherwise sets `req.user`. */
 export function requireAuth(ctx) {
   return (req, res, next) => {
     const token = readCookie(req, SESSION_COOKIE);
     const session = token && ctx.sessions.validate(token);
     if (!session) return next(new HttpError(401, 'Not signed in'));
     if (session.renewed) setSessionCookie(req, res, token, ctx.config.sessionTtlMs);
+    req.user = session.user;
     next();
   };
+}
+
+export function requireOwner(req, res, next) {
+  next(req.user?.is_owner === 1 ? undefined : new HttpError(403, 'Only the owner can do that'));
 }

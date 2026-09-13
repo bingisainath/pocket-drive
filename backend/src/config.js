@@ -28,6 +28,34 @@ function number(env, key, fallback) {
   return n;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function email(env, key) {
+  const value = (env[key] || '').trim().toLowerCase();
+  if (value && !EMAIL_RE.test(value)) throw new Error(`${key} must be an email address (got "${env[key]}")`);
+  return value;
+}
+
+/** Comma-separated list of bare origins, e.g. "https://phone.tailnet.ts.net:8443,http://localhost:3000". */
+function origins(env, key) {
+  return (env[key] || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      let url;
+      try {
+        url = new URL(raw);
+      } catch {
+        throw new Error(`${key} contains an invalid URL: "${raw}"`);
+      }
+      if (!/^https?:$/.test(url.protocol) || url.pathname !== '/' || url.search || url.hash) {
+        throw new Error(`${key} entries must look like https://host:port (got "${raw}")`);
+      }
+      return url.origin;
+    });
+}
+
 function trustProxy(raw) {
   if (!raw) return 'loopback'; // tailscale serve/funnel proxies from localhost
   if (raw === 'true') return true;
@@ -54,5 +82,15 @@ export function buildConfig(env = process.env) {
     loginMaxAttempts: number(env, 'LOGIN_MAX_ATTEMPTS', 10),
     loginWindowMs: number(env, 'LOGIN_WINDOW_MINUTES', 15) * 60 * 1000,
     trustProxy: trustProxy(env.TRUST_PROXY),
+    // Accounts and sharing
+    ownerEmail: email(env, 'OWNER_EMAIL'),
+    publicOrigins: origins(env, 'PUBLIC_ORIGINS'),
+    google: {
+      clientId: (env.GOOGLE_CLIENT_ID || '').trim(),
+      clientSecret: (env.GOOGLE_CLIENT_SECRET || '').trim(),
+      authUrl: env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
+    },
+    activityRetentionDays: number(env, 'ACTIVITY_RETENTION_DAYS', 180),
   };
 }

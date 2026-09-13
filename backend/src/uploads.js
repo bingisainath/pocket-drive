@@ -23,9 +23,10 @@ export function formatBytes(bytes) {
 /**
  * Stream every file in a multipart request to disk (constant memory: busboy -> temp file, with
  * backpressure all the way to the socket), then move each into `parentAbs` under a unique name.
- * Resolves to one `{ ok, row }` / `{ ok: false, name, err }` result per file.
+ * Resolves to one `{ ok, row }` / `{ ok: false, name, err }` result per file. `ownerId` is the
+ * uploading user.
  */
-export async function receiveUpload(req, ctx, parentPath, parentAbs) {
+export async function receiveUpload(req, ctx, parentPath, parentAbs, ownerId) {
   let bb;
   try {
     bb = Busboy({
@@ -49,7 +50,7 @@ export async function receiveUpload(req, ctx, parentPath, parentAbs) {
       streams.add(stream);
       stream.once('close', () => streams.delete(stream));
       jobs.push(
-        saveFile(stream, info.filename, ctx, parentPath, parentAbs).then(
+        saveFile(stream, info.filename, ctx, parentPath, parentAbs, ownerId).then(
           (row) => ({ ok: true, row }),
           (err) => ({ ok: false, name: info.filename, err }),
         ),
@@ -57,7 +58,7 @@ export async function receiveUpload(req, ctx, parentPath, parentAbs) {
     });
     bb.on('close', resolve);
     bb.on('error', (err) => reject(new HttpError(400, `Malformed upload: ${err.message}`)));
-    req.on('error', reject);
+    req.on('error', () => reject(new HttpError(400, 'Upload aborted'))); // client went away mid-upload
     req.on('close', () => {
       if (!req.complete) reject(new HttpError(400, 'Upload aborted'));
     });
@@ -76,7 +77,7 @@ export async function receiveUpload(req, ctx, parentPath, parentAbs) {
   return Promise.all(jobs);
 }
 
-async function saveFile(stream, filename, ctx, parentPath, parentAbs) {
+async function saveFile(stream, filename, ctx, parentPath, parentAbs, ownerId) {
   const { config, repo, thumbs } = ctx;
   let name;
   try {
@@ -101,6 +102,7 @@ async function saveFile(stream, filename, ctx, parentPath, parentAbs) {
       size,
       mime: mime.lookup(finalName) || 'application/octet-stream',
       createdAt: Date.now(),
+      ownerId,
     });
     if (replacedIds.length) await thumbs.remove(replacedIds);
     thumbs.warm(row);

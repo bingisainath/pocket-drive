@@ -26,6 +26,11 @@ const server = createApp(ctx).listen(config.port, config.host, (err) => {
   console.log(`  files:  ${config.storageDir}`);
   console.log(`  data:   ${config.dataDir}`);
   console.log(`  upload limit: ${formatBytes(config.maxUploadBytes)} per file`);
+  console.log(`  owner: ${ctx.users.owner().email}`);
+  if (ctx.google.enabled) console.log(`  Google sign-in: on for ${ctx.google.origins.join(', ')}`);
+  else if (config.google.clientId) {
+    console.log('  Google sign-in: OFF — also set OWNER_EMAIL and PUBLIC_ORIGINS (and GOOGLE_CLIENT_SECRET)');
+  } else console.log('  Google sign-in: not set up (owner password only)');
   ctx.scanner
     .run()
     .then((r) => console.log(`Index synced with disk (+${r.added} ~${r.updated} -${r.removed})`))
@@ -39,6 +44,7 @@ server.headersTimeout = 60_000;
 server.timeout = 120_000;
 
 setInterval(() => ctx.sessions.prune(), 60 * 60 * 1000).unref();
+setInterval(() => ctx.activity.prune(), 24 * 60 * 60 * 1000).unref();
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {

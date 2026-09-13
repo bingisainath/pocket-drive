@@ -68,7 +68,10 @@ test('API requires a session', async () => {
   for (const url of ['/api/list', '/api/storage', '/api/files/1/raw', '/api/files/1/thumb']) {
     assert.equal((await api('GET', url)).status, 401, url);
   }
-  assert.deepEqual(await (await api('GET', '/api/auth/me')).json(), { authenticated: false });
+  const me = await (await api('GET', '/api/auth/me')).json();
+  assert.equal(me.authenticated, false);
+  assert.equal(me.user, null);
+  assert.deepEqual(me.google, { enabled: false, origins: [] }); // no Google client configured here
 });
 
 test('wrong password is rejected', async () => {
@@ -85,7 +88,9 @@ test('correct password sets an HttpOnly session cookie', async () => {
   assert.match(setCookie, /HttpOnly/);
   assert.match(setCookie, /SameSite=Lax/);
   cookie = setCookie.split(';')[0];
-  assert.deepEqual(await (await api('GET', '/api/auth/me')).json(), { authenticated: true });
+  const me = await (await api('GET', '/api/auth/me')).json();
+  assert.equal(me.authenticated, true);
+  assert.equal(me.user.isOwner, true); // the password is the owner's backup sign-in
 });
 
 // --- folders ---
