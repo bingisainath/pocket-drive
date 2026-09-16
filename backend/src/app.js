@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { requireAuth } from './auth.js';
@@ -38,6 +39,24 @@ export function createApp(ctx) {
   });
 
   // --- API ---
+  // Public health check for uptime monitors (UptimeRobot) and the phone's watchdog. It says only
+  // whether the database answers and storage has room, nothing about the files or users.
+  app.get('/api/health', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    let problem = null;
+    try {
+      ctx.db.prepare('SELECT 1').get();
+    } catch {
+      problem = 'database';
+    }
+    if (!problem) {
+      const disk = await fsp.statfs(config.storageDir).catch(() => null);
+      if (!disk || disk.bavail * disk.bsize < config.minFreeBytes) problem = 'storage';
+    }
+    if (problem) res.status(503).json({ status: 'error', problem });
+    else res.json({ status: 'ok' });
+  });
+
   app.use('/api', express.json({ limit: '32kb' }));
   app.use('/api/auth', authRoutes(ctx));
   app.use('/api/admin', requireAuth(ctx), adminRoutes(ctx));

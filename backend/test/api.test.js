@@ -81,6 +81,13 @@ test('API requires a session', async () => {
   assert.deepEqual(me.google, { enabled: false, origins: [] }); // no Google client configured here
 });
 
+test('health check is public and reveals nothing but the status', async () => {
+  const res = await api('GET', '/api/health', { auth: false });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await res.json(), { status: 'ok' });
+});
+
 test('wrong password is rejected', async () => {
   const res = await api('POST', '/api/auth/login', { json: { password: 'nope' } });
   assert.equal(res.status, 401);
