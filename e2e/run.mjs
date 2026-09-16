@@ -400,9 +400,13 @@ try {
   await sleep(300);
   await shot(page, '06-preview-photo');
   const before = (await dialogs(page))[0];
-  await page.keyboard.press('ArrowRight');
+  // Parallel uploads finish in any order, so the photo may be first or last in the list: step
+  // towards whichever neighbour exists, then back.
+  const hasNext = Boolean(await page.$('button[aria-label="Next file"]'));
+  const [away, back] = hasNext ? ['ArrowRight', 'ArrowLeft'] : ['ArrowLeft', 'ArrowRight'];
+  await page.keyboard.press(away);
   await page.waitForFunction((b) => document.querySelector('[role=dialog]')?.getAttribute('aria-label') !== b, {}, before);
-  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press(back);
   await page.waitForFunction((b) => document.querySelector('[role=dialog]')?.getAttribute('aria-label') === b, {}, before);
   await page.evaluate(() => history.back());
   await page.waitForFunction(() => !document.querySelector('[role=dialog]'));

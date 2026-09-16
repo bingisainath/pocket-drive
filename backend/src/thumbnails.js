@@ -7,7 +7,6 @@ import { joinRel, resolveInside } from './paths.js';
 sharp.cache(false); // don't keep decoded images in memory between requests
 sharp.concurrency(1); // one libvips thread per image; we parallelize across images instead
 
-const SIZE = 400; // square, cropped; ~2x a grid cell on a phone
 const MAX_PARALLEL = 2;
 const SUPPORTED = new Set([
   'image/jpeg',
@@ -20,12 +19,35 @@ const SUPPORTED = new Set([
   'image/heif',
   'image/svg+xml',
 ]);
+// Previews skip GIF (would lose animation) and SVG (already tiny and scales perfectly).
+const PREVIEWABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/tiff', 'image/heic', 'image/heif']);
+// Browsers can't show these at all, so they always get a preview whatever their size.
+const NOT_BROWSER_SAFE = new Set(['image/tiff', 'image/heic', 'image/heif']);
+// Below this, the original is small enough to send as is (and keeps crisp PNG screenshots lossless).
+export const PREVIEW_MIN_BYTES = 1024 * 1024;
+
+const VARIANTS = {
+  // Square, cropped; ~2x a grid cell on a phone.
+  thumb: {
+    file: (id) => `${id}.webp`,
+    render: (img) => img.resize(400, 400, { fit: 'cover' }).webp({ quality: 72 }),
+  },
+  // For the photo viewer: sharper than any phone screen, ~15x smaller than a camera original.
+  preview: {
+    file: (id) => `${id}-preview.webp`,
+    render: (img) => img.resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }),
+  },
+};
 
 export const canThumbnail = (mime) => SUPPORTED.has(mime);
+export const canPreview = (mime) => PREVIEWABLE.has(mime);
+/** Whether the photo viewer should show the preview instead of the original. Mirrored in frontend/src/lib/entries.ts. */
+export const wantsPreview = (row) =>
+  canPreview(row.mime) && (row.size > PREVIEW_MIN_BYTES || NOT_BROWSER_SAFE.has(row.mime));
 
 export function createThumbnailer({ thumbDir, storageDir }) {
-  const inflight = new Map(); // id -> Promise<path|null>
-  const failed = new Set(); // ids sharp couldn't decode (e.g. HEVC-encoded HEIC); don't retry until restart
+  const inflight = new Map(); // "variant:id" -> Promise<path|null>
+  const failed = new Set(); // "variant:id" sharp couldn't decode (e.g. HEVC-encoded HEIC); don't retry until restart
   const waiting = [];
   let active = 0;
 
@@ -36,22 +58,18 @@ export function createThumbnailer({ thumbDir, storageDir }) {
     if (next) next();
     else active--;
   };
-  const thumbPath = (id) => path.join(thumbDir, `${id}.webp`);
 
-  async function render(row, out) {
+  async function render(row, variant, key, out) {
     await acquire();
     const tmp = `${out}.${crypto.randomUUID()}.tmp`;
     try {
       const src = resolveInside(storageDir, joinRel(row.parent_path, row.name));
-      await sharp(src, { failOn: 'none', limitInputPixels: 200_000_000 })
-        .rotate() // honor EXIF orientation from phone cameras
-        .resize(SIZE, SIZE, { fit: 'cover' })
-        .webp({ quality: 72 })
-        .toFile(tmp);
+      const img = sharp(src, { failOn: 'none', limitInputPixels: 200_000_000 }).rotate(); // honor EXIF orientation
+      await VARIANTS[variant].render(img).toFile(tmp);
       await fsp.rename(tmp, out);
       return out;
     } catch {
-      failed.add(row.id);
+      failed.add(key);
       await fsp.rm(tmp, { force: true });
       return null;
     } finally {
@@ -59,30 +77,35 @@ export function createThumbnailer({ thumbDir, storageDir }) {
     }
   }
 
-  /** Path of the cached thumbnail for a file row, rendering it on first request; null if unavailable. */
-  async function get(row) {
-    if (!canThumbnail(row.mime) || failed.has(row.id)) return null;
-    const out = thumbPath(row.id);
+  /** Path of the cached image for a file row, rendering it on first request; null if unavailable. */
+  async function get(row, variant = 'thumb') {
+    const allowed = variant === 'preview' ? canPreview(row.mime) : canThumbnail(row.mime);
+    const key = `${variant}:${row.id}`;
+    if (!allowed || failed.has(key)) return null;
+    const out = path.join(thumbDir, VARIANTS[variant].file(row.id));
     try {
       await fsp.access(out);
       return out;
     } catch {}
-    let job = inflight.get(row.id);
+    let job = inflight.get(key);
     if (!job) {
-      job = render(row, out).finally(() => inflight.delete(row.id));
-      inflight.set(row.id, job);
+      job = render(row, variant, key, out).finally(() => inflight.delete(key));
+      inflight.set(key, job);
     }
     return job;
   }
 
   return {
     get,
-    /** Render in the background (e.g. right after upload) so the grid loads instantly. */
+    /** Render in the background (e.g. right after upload) so the grid and viewer load instantly. */
     warm(row) {
-      get(row).catch(() => {});
+      get(row, 'thumb')
+        .then(() => wantsPreview(row) && get(row, 'preview'))
+        .catch(() => {});
     },
     async remove(ids) {
-      await Promise.all(ids.map((id) => fsp.rm(thumbPath(id), { force: true })));
+      const files = ids.flatMap((id) => Object.values(VARIANTS).map((v) => path.join(thumbDir, v.file(id))));
+      await Promise.all(files.map((file) => fsp.rm(file, { force: true })));
     },
   };
 }

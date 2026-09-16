@@ -51,6 +51,16 @@ const THUMB_MIMES = new Set([
 ]);
 export const hasThumbnail = (e: Entry) => !e.isDir && THUMB_MIMES.has(e.mime ?? '');
 
+// Must match wantsPreview() in the backend's thumbnailer.
+const PREVIEW_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/tiff', 'image/heic', 'image/heif']);
+const NOT_BROWSER_SAFE = new Set(['image/tiff', 'image/heic', 'image/heif']);
+const PREVIEW_MIN_BYTES = 1024 * 1024;
+/** The photo viewer shows a screen-sized preview for big photos and formats browsers can't display. */
+export const wantsPreview = (e: Entry) => {
+  const mime = e.mime ?? '';
+  return !e.isDir && PREVIEW_MIMES.has(mime) && (e.size > PREVIEW_MIN_BYTES || NOT_BROWSER_SAFE.has(mime));
+};
+
 export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text';
 const TEXT_PREVIEW_MAX = 1024 * 1024;
 

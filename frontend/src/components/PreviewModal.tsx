@@ -3,7 +3,7 @@ import { Suspense, lazy, useEffect, useRef, useState, type TouchEvent } from 're
 import { createPortal } from 'react-dom';
 import { urls } from '../api';
 import { useOverlay } from '../hooks/useOverlay';
-import { previewKind } from '../lib/entries';
+import { previewKind, wantsPreview } from '../lib/entries';
 import { formatBytes, formatDateTime } from '../lib/format';
 import type { Entry } from '../types';
 import { FileIcon } from './FileIcon';
@@ -41,9 +41,9 @@ export function PreviewModal({ entry, siblings, onClose, onNavigate, onDelete }:
     return () => window.removeEventListener('keydown', onKey);
   }, [prev, next, onNavigate, isTop]);
 
-  // Warm the cache for the next photo so swiping through a folder feels instant.
+  // Warm the cache for the next photo (its preview, not the multi-MB original) so swiping feels instant.
   useEffect(() => {
-    if (next && previewKind(next) === 'image') new window.Image().src = urls.raw(next);
+    if (next && previewKind(next) === 'image') new window.Image().src = imageSrc(next);
   }, [next]);
 
   // Horizontal swipe between photos (ignored while pinch-zoomed or for video/PDF, which need gestures).
@@ -150,18 +150,52 @@ function PreviewContent({ entry }: { entry: Entry }) {
   }
 }
 
+/** Big photos open as a screen-sized preview; small ones (and GIF/SVG) as the original. */
+const imageSrc = (entry: Entry) => (wantsPreview(entry) ? urls.preview(entry) : urls.raw(entry));
+/** Pinch-zoom level past which the preview isn't sharp enough and the original is swapped in. */
+const ZOOMED_SCALE = 1.05;
+
 function ImagePreview({ entry }: { entry: Entry }) {
+  const original = urls.raw(entry);
+  const [src, setSrc] = useState(() => imageSrc(entry));
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  // Zooming into a preview: load the original in the background and swap it in once it has
+  // arrived, so the photo never blanks out mid-gesture.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport || src === original) return;
+    let loader: HTMLImageElement | null = null;
+    const onResize = () => {
+      if (loader || viewport.scale <= ZOOMED_SCALE) return;
+      loader = new window.Image();
+      loader.onload = () => setSrc(original);
+      loader.src = original;
+    };
+    onResize();
+    viewport.addEventListener('resize', onResize);
+    return () => {
+      viewport.removeEventListener('resize', onResize);
+      if (loader) loader.onload = null;
+    };
+  }, [src, original]);
+
+  const onError = () => {
+    // No preview (e.g. a HEIC the server can't decode): fall back to the original before giving up.
+    if (src !== original) setSrc(original);
+    else setState('error');
+  };
+
   if (state === 'error') return <NoPreview entry={entry} reason="Your browser can’t display this image format." />;
   return (
     <>
       {state === 'loading' && <Spinner className="absolute size-8 text-white/60" />}
       <img
-        src={urls.raw(entry)}
+        src={src}
         alt={entry.name}
         draggable={false}
         onLoad={() => setState('ready')}
-        onError={() => setState('error')}
+        onError={onError}
         className={`max-h-full max-w-full object-contain transition-opacity duration-200 select-none ${state === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
     </>

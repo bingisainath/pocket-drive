@@ -211,6 +211,13 @@ export function fileRoutes(ctx) {
     sendFile(res, next, thumb, { 'Content-Type': 'image/webp', 'Cache-Control': 'private, max-age=2592000, immutable' });
   });
 
+  // Screen-sized version for the photo viewer; the original stays available via /raw and /download.
+  router.get('/files/:id/preview', async (req, res, next) => {
+    const preview = await thumbs.get(requireEntry(req, { file: true }), 'preview');
+    if (!preview) throw new HttpError(404, 'No preview');
+    sendFile(res, next, preview, { 'Content-Type': 'image/webp', 'Cache-Control': 'private, max-age=2592000, immutable' });
+  });
+
   router.delete('/entries/:id', async (req, res) => {
     const row = requireEntry(req);
     if (!canDelete(req.access, row)) throw new HttpError(403, 'You don’t have permission to delete this');

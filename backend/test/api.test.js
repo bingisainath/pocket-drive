@@ -12,6 +12,7 @@ import { hashPassword } from '../src/auth.js';
 import { buildConfig } from '../src/config.js';
 import { createContext } from '../src/context.js';
 import { sanitizeName } from '../src/paths.js';
+import { wantsPreview } from '../src/thumbnails.js';
 
 const PASSWORD = 'correct horse battery';
 const silent = { warn() {}, log() {}, error() {} };
@@ -272,6 +273,35 @@ test('thumbnails are generated as small WebP images', async () => {
   assert.equal((await api('GET', `/api/files/${folder.id}/raw`)).status, 404);
 });
 
+test('previews are screen-sized WebP images that never upscale', async () => {
+  const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: '#a53' } }).jpeg().toBuffer();
+  const jpg = (await (await upload('Photos/2024', [['big.jpg', big, 'image/jpeg']])).json()).files[0];
+  let res = await api('GET', `/api/files/${jpg.id}/preview`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/webp');
+  let meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepEqual([meta.format, meta.width, meta.height], ['webp', 1600, 1067]);
+  assert.ok(fs.existsSync(path.join(config.thumbDir, `${jpg.id}-preview.webp`)));
+
+  res = await api('GET', `/api/files/${png.id}/preview`); // 800x600 stays 800x600
+  meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepEqual([meta.width, meta.height], [800, 600]);
+
+  const txt = (await list('Photos')).find((e) => e.name === 'a.txt');
+  assert.equal((await api('GET', `/api/files/${txt.id}/preview`)).status, 404);
+  assert.equal((await api('GET', '/api/files/999999/preview')).status, 404);
+});
+
+test('the viewer uses previews only for large or non-browser image formats', () => {
+  const MB = 1024 * 1024;
+  assert.equal(wantsPreview({ mime: 'image/jpeg', size: 5 * MB }), true);
+  assert.equal(wantsPreview({ mime: 'image/jpeg', size: 300 * 1024 }), false);
+  assert.equal(wantsPreview({ mime: 'image/heic', size: 300 * 1024 }), true);
+  assert.equal(wantsPreview({ mime: 'image/gif', size: 5 * MB }), false);
+  assert.equal(wantsPreview({ mime: 'image/svg+xml', size: 5 * MB }), false);
+  assert.equal(wantsPreview({ mime: 'text/plain', size: 5 * MB }), false);
+});
+
 // --- search / listing ---
 
 test('search finds files in any folder, case-insensitively', async () => {
@@ -323,6 +353,7 @@ test('deleting a folder removes everything beneath it', async () => {
   assert.ok(!(await list()).some((e) => e.name === 'Photos'));
   assert.deepEqual((await (await api('GET', '/api/search?q=pic')).json()).entries, []);
   assert.ok(!fs.existsSync(path.join(config.thumbDir, `${png.id}.webp`)));
+  assert.ok(!fs.existsSync(path.join(config.thumbDir, `${png.id}-preview.webp`)));
   assert.equal((await api('DELETE', `/api/entries/${photos.id}`)).status, 404);
 });
 

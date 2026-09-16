@@ -75,6 +75,7 @@ export const urls = {
   raw: (e: Entry) => `/api/files/${e.id}/raw`,
   download: (e: Entry) => `/api/files/${e.id}/download`,
   thumb: (e: Entry) => `/api/files/${e.id}/thumb`,
+  preview: (e: Entry) => `/api/files/${e.id}/preview`,
 };
 
 /** Starts "Sign in with Google" from this address, coming back to `returnTo` afterwards. */

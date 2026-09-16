@@ -3,8 +3,9 @@ import { UploadCancelled, uploadFile } from '../api';
 import { formatBytes } from '../lib/format';
 import type { Entry } from '../types';
 
-// Two at a time keeps the phone's disk and CPU (thumbnailing) responsive.
-const MAX_PARALLEL = 2;
+// The server stores a photo in ~0.1 s, so the sender's connection is the limit; four at a time
+// cuts per-file connection overhead on big batches. Thumbnailing is queued separately on the server.
+const MAX_PARALLEL = 4;
 const PROGRESS_INTERVAL_MS = 150;
 
 export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error' | 'cancelled';
