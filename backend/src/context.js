@@ -1,9 +1,12 @@
 import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { createShareStore } from './access.js';
 import { createActivityLog } from './activity.js';
 import { createLoginLimiter, createSessionStore, parsePasswordHash } from './auth.js';
+import { RESUMABLE_DIR_NAME } from './config.js';
 import { createRepo, openDatabase } from './db.js';
 import { createGoogleAuth } from './google.js';
+import { createResumableUploads } from './resumable.js';
 import { createScanner } from './scanner.js';
 import { createThumbnailer } from './thumbnails.js';
 import { createUserStore } from './users.js';
@@ -15,8 +18,11 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
   for (const dir of [config.dataDir, config.storageDir, config.thumbDir]) {
     await fsp.mkdir(dir, { recursive: true });
   }
-  await fsp.rm(config.tmpDir, { recursive: true, force: true }); // leftovers from interrupted uploads
-  await fsp.mkdir(config.tmpDir, { recursive: true });
+  // Leftovers from interrupted single-request uploads. Chunked uploads are kept so they can resume.
+  await fsp.mkdir(config.resumableDir, { recursive: true });
+  for (const name of await fsp.readdir(config.tmpDir)) {
+    if (name !== RESUMABLE_DIR_NAME) await fsp.rm(path.join(config.tmpDir, name), { recursive: true, force: true });
+  }
 
   const db = openDatabase(config.dbPath);
   const repo = createRepo(db);
@@ -29,6 +35,8 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
   sessions.resetIfPasswordChanged(config.passwordHash);
   sessions.prune();
   const thumbs = createThumbnailer(config);
+  const resumable = createResumableUploads({ dir: config.resumableDir, chunkBytes: config.uploadChunkBytes });
+  await resumable.prune();
 
   return {
     config,
@@ -41,6 +49,7 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
     activity,
     sessions,
     thumbs,
+    resumable,
     google: createGoogleAuth(config, { fetchImpl }),
     scanner: createScanner({ config, repo, shares, thumbs, log }),
     limiter: createLoginLimiter({ maxAttempts: config.loginMaxAttempts, windowMs: config.loginWindowMs }),

@@ -6,7 +6,8 @@ import { accessFor } from '../access.js';
 import { toDto } from '../db.js';
 import { HttpError } from '../http-error.js';
 import { joinRel, normalizeRelPath, resolveInside, sanitizeName, splitRel } from '../paths.js';
-import { receiveUpload } from '../uploads.js';
+import { OffsetMismatch } from '../resumable.js';
+import { commitFile, formatBytes, receiveUpload } from '../uploads.js';
 
 // Types browsers render without running scripts in our origin — safe to show inline.
 const isSafeInline = (type) =>
@@ -32,7 +33,7 @@ async function diskUsage(dir) {
 // Every route here checks the signed-in user's access. Anything a user may not see answers
 // 404, exactly like something that doesn't exist, so private folders can't even be detected.
 export function fileRoutes(ctx) {
-  const { config, repo, thumbs, scanner, shares, activity } = ctx;
+  const { config, repo, thumbs, scanner, shares, activity, resumable } = ctx;
   const router = Router();
 
   router.use((req, res, next) => {
@@ -200,6 +201,61 @@ export function fileRoutes(ctx) {
       files: saved.map((row) => dto(req, { ...row, uploaded_by: req.user.email })),
       errors: failures.map((f) => ({ name: f.name, error: f.err.status ? f.err.message : 'Failed to save' })),
     });
+  });
+
+  // --- Chunked, resumable uploads ---
+  // POST starts one (or finds the unfinished upload of the same file), PUT appends a chunk at
+  // Upload-Offset, GET reports how far it got, DELETE abandons it. Each chunk is its own request,
+  // so big files get through Cloudflare's 100 MB request limit and survive dropped connections.
+
+  router.post('/uploads', async (req, res) => {
+    const parentPath = normalizeRelPath(req.body?.path);
+    writableFolder(req, parentPath);
+    const name = sanitizeName(req.body?.name);
+    const size = Number(req.body?.size);
+    const lastModified = Number(req.body?.lastModified) || 0;
+    if (!Number.isSafeInteger(size) || size < 0) throw new HttpError(400, 'Invalid file size');
+    if (size > config.maxUploadBytes) {
+      throw new HttpError(413, `"${name}" is larger than the ${formatBytes(config.maxUploadBytes)} upload limit`);
+    }
+    const upload = await resumable.open({ userId: req.user.id, parentPath, name, size, lastModified });
+    if (size - upload.offset > (await diskUsage(config.storageDir)).free - config.minFreeBytes) {
+      if (upload.offset === 0) await resumable.discard(upload);
+      throw new HttpError(507, 'Not enough free space on the device');
+    }
+    res.json({ ...upload, chunkSize: resumable.chunkBytes });
+  });
+
+  router.get('/uploads/:id', async (req, res) => {
+    const upload = await resumable.load(req.params.id, req.user.id);
+    res.json({ offset: await resumable.offset(upload), size: upload.size });
+  });
+
+  router.put('/uploads/:id', async (req, res) => {
+    let upload, offset;
+    try {
+      upload = await resumable.load(req.params.id, req.user.id);
+      const start = Number(req.get('upload-offset'));
+      if (!Number.isSafeInteger(start)) throw new HttpError(400, 'Missing Upload-Offset header');
+      offset = await resumable.append(upload, start, req);
+    } catch (err) {
+      res.set('Connection', 'close'); // don't make the client finish sending a chunk we won't store
+      if (err instanceof OffsetMismatch) return res.status(409).json({ error: err.message, offset: err.offset });
+      throw err;
+    }
+    if (offset < upload.size) return res.json({ offset });
+
+    // Last chunk: the folder may have been deleted or unshared since the upload started.
+    const parentAbs = writableFolder(req, upload.parentPath);
+    const row = await commitFile(ctx, resumable.partPath(upload), upload.parentPath, parentAbs, upload.name, req.user.id);
+    await resumable.discard(upload);
+    activity.log(actor(req), 'upload', { path: fullPathOf(row), detail: { size: row.size } });
+    res.status(201).json({ offset, file: dto(req, { ...row, uploaded_by: req.user.email }) });
+  });
+
+  router.delete('/uploads/:id', async (req, res) => {
+    await resumable.discard(await resumable.load(req.params.id, req.user.id));
+    res.status(204).end();
   });
 
   router.get('/files/:id/raw', (req, res, next) => sendEntry(req, res, next, 'inline'));

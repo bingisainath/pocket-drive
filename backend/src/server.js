@@ -53,6 +53,7 @@ server.headersTimeout = 60_000;
 server.timeout = 120_000;
 
 setInterval(() => ctx.sessions.prune(), 60 * 60 * 1000).unref();
+setInterval(() => ctx.resumable.prune().catch(() => {}), 60 * 60 * 1000).unref();
 setInterval(() => ctx.activity.prune(), 24 * 60 * 60 * 1000).unref();
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

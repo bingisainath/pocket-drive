@@ -57,7 +57,8 @@ export function createApp(ctx) {
     else res.json({ status: 'ok' });
   });
 
-  app.use('/api', express.json({ limit: '32kb' }));
+  // Chunks of a file upload (PUT /api/uploads/:id) are raw bytes even when the file itself is JSON.
+  app.use('/api', express.json({ limit: '32kb', type: (req) => req.method !== 'PUT' && Boolean(req.is('application/json')) }));
   app.use('/api/auth', authRoutes(ctx));
   app.use('/api/admin', requireAuth(ctx), adminRoutes(ctx));
   app.use('/api', requireAuth(ctx), fileRoutes(ctx));

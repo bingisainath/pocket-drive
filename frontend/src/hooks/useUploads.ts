@@ -16,13 +16,15 @@ export interface UploadItem {
   folder: string;
   loaded: number;
   status: UploadStatus;
+  /** Waiting to reconnect after the connection dropped mid-upload. */
+  reconnecting?: boolean;
   error?: string;
   retryable: boolean;
 }
 
 let nextId = 1;
 
-/** Upload queue: one request per file, a few in parallel, with per-file progress, cancel and retry. */
+/** Upload queue: each file sent in resumable chunks, a few files in parallel, with progress, cancel and retry. */
 export function useUploads(onUploaded: (entry: Entry) => void) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const aborts = useRef(new Map<number, () => void>());
@@ -47,21 +49,29 @@ export function useUploads(onUploaded: (entry: Entry) => void) {
       update(item.id, { status: 'uploading', loaded: 0, error: undefined });
 
       let lastPaint = 0;
-      const { promise, abort } = uploadFile(item.file, item.folder, (loaded) => {
-        const now = performance.now();
-        if (now - lastPaint < PROGRESS_INTERVAL_MS) return;
-        lastPaint = now;
-        update(item.id, { loaded });
+      const { promise, abort } = uploadFile(item.file, item.folder, {
+        onProgress: (loaded) => {
+          const now = performance.now();
+          if (now - lastPaint < PROGRESS_INTERVAL_MS) return;
+          lastPaint = now;
+          update(item.id, { loaded });
+        },
+        onReconnecting: (reconnecting) => update(item.id, { reconnecting }),
       });
       aborts.current.set(item.id, abort);
       promise
         .then(
           (entry) => {
-            update(item.id, { status: 'done', loaded: item.file.size });
+            update(item.id, { status: 'done', loaded: item.file.size, reconnecting: false });
             onUploadedRef.current(entry);
           },
           (err: Error) => {
-            update(item.id, err instanceof UploadCancelled ? { status: 'cancelled' } : { status: 'error', error: err.message });
+            update(
+              item.id,
+              err instanceof UploadCancelled
+                ? { status: 'cancelled', reconnecting: false }
+                : { status: 'error', error: err.message, reconnecting: false },
+            );
           },
         )
         .finally(() => aborts.current.delete(item.id));

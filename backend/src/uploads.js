@@ -78,7 +78,7 @@ export async function receiveUpload(req, ctx, parentPath, parentAbs, ownerId) {
 }
 
 async function saveFile(stream, filename, ctx, parentPath, parentAbs, ownerId) {
-  const { config, repo, thumbs } = ctx;
+  const { config } = ctx;
   let name;
   try {
     name = sanitizeName(filename);
@@ -93,23 +93,32 @@ async function saveFile(stream, filename, ctx, parentPath, parentAbs, ownerId) {
     if (stream.truncated) {
       throw new HttpError(413, `"${name}" is larger than the ${formatBytes(config.maxUploadBytes)} upload limit`);
     }
-    const { size } = await fsp.stat(tmp);
-    const finalName = await moveIntoPlace(tmp, parentAbs, name);
-    const { row, replacedIds } = repo.replace({
-      parentPath,
-      name: finalName,
-      isDir: 0,
-      size,
-      mime: mime.lookup(finalName) || 'application/octet-stream',
-      createdAt: Date.now(),
-      ownerId,
-    });
-    if (replacedIds.length) await thumbs.remove(replacedIds);
-    thumbs.warm(row);
-    return row;
+    return await commitFile(ctx, tmp, parentPath, parentAbs, name, ownerId);
   } finally {
     await fsp.rm(tmp, { force: true }); // no-op once the file has been renamed into place
   }
+}
+
+/**
+ * Move a fully received file into its folder under a free name, index it, and start making its
+ * thumbnail/preview. Shared by single-request and chunked uploads. Resolves to the new row.
+ */
+export async function commitFile(ctx, tmp, parentPath, parentAbs, name, ownerId) {
+  const { repo, thumbs } = ctx;
+  const { size } = await fsp.stat(tmp);
+  const finalName = await moveIntoPlace(tmp, parentAbs, name);
+  const { row, replacedIds } = repo.replace({
+    parentPath,
+    name: finalName,
+    isDir: 0,
+    size,
+    mime: mime.lookup(finalName) || 'application/octet-stream',
+    createdAt: Date.now(),
+    ownerId,
+  });
+  if (replacedIds.length) await thumbs.remove(replacedIds);
+  thumbs.warm(row);
+  return row;
 }
 
 /** Atomically claim `name` (or "name (1)", "name (2)", ...) in `dirAbs` and move the temp file there. */

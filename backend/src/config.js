@@ -9,6 +9,7 @@ export const ENV_EXAMPLE_PATH = path.join(BACKEND_ROOT, '.env.example');
 
 /** Hidden dir inside the storage root for in-flight uploads (same filesystem => atomic rename into place). */
 export const TMP_DIR_NAME = '.cloud-drive-tmp';
+export const RESUMABLE_DIR_NAME = 'resumable';
 
 const MB = 1024 * 1024;
 
@@ -72,6 +73,8 @@ export function buildConfig(env = process.env) {
     dataDir,
     storageDir,
     tmpDir: path.join(storageDir, TMP_DIR_NAME),
+    // Unfinished chunked uploads; kept across restarts so they can resume.
+    resumableDir: path.join(storageDir, TMP_DIR_NAME, RESUMABLE_DIR_NAME),
     thumbDir: path.join(dataDir, 'thumbs'),
     // External tools, looked up on PATH unless given as absolute paths.
     heifDecoder: env.HEIF_DECODER || 'heif-dec',
@@ -79,6 +82,8 @@ export function buildConfig(env = process.env) {
     frontendDist: path.resolve(expandHome(env.FRONTEND_DIST || path.join(BACKEND_ROOT, '..', 'frontend', 'dist'))),
     passwordHash: (env.PASSWORD_HASH || '').trim(),
     maxUploadBytes: Math.floor(number(env, 'MAX_UPLOAD_MB', 4096) * MB),
+    // Each chunk is one request, so this must stay under Cloudflare's 100 MB request limit.
+    uploadChunkBytes: Math.max(64 * 1024, Math.floor(number(env, 'UPLOAD_CHUNK_MB', 16) * MB)),
     minFreeBytes: Math.floor(number(env, 'MIN_FREE_MB', 500) * MB),
     sessionTtlMs: number(env, 'SESSION_DAYS', 30) * 24 * 60 * 60 * 1000,
     loginMaxAttempts: number(env, 'LOGIN_MAX_ATTEMPTS', 10),

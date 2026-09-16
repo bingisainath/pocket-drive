@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -12,6 +13,7 @@ import { hashPassword } from '../src/auth.js';
 import { buildConfig } from '../src/config.js';
 import { createContext } from '../src/context.js';
 import { sanitizeName } from '../src/paths.js';
+import { RESUMABLE_TTL_MS } from '../src/resumable.js';
 import { wantsPreview } from '../src/thumbnails.js';
 
 const PASSWORD = 'correct horse battery';
@@ -30,6 +32,7 @@ before(async () => {
     HEIF_DECODER: fakeHeifDec,
     PASSWORD_HASH: hashPassword(PASSWORD, { N: 1024, r: 8, p: 1 }), // cheap cost for fast tests
     MAX_UPLOAD_MB: '1',
+    UPLOAD_CHUNK_MB: '0.1',
     LOGIN_MAX_ATTEMPTS: '3',
     FRONTEND_DIST: path.join(tmp, 'no-frontend'),
   });
@@ -67,7 +70,11 @@ async function list(folder = '') {
 }
 
 const onDisk = (rel) => fs.existsSync(path.join(config.storageDir, rel));
-const tmpLeftovers = () => fs.readdirSync(config.tmpDir);
+const tmpLeftovers = () => fs.readdirSync(config.tmpDir).filter((name) => name !== 'resumable');
+
+const startUpload = (json) => api('POST', '/api/uploads', { json });
+const putChunk = (id, offset, body, type = 'application/octet-stream') =>
+  api('PUT', `/api/uploads/${id}`, { body, headers: { 'content-type': type, 'upload-offset': String(offset) } });
 
 // --- auth ---
 
@@ -187,6 +194,84 @@ test('uploaded filenames cannot escape the target folder', async () => {
   assert.match(sanitizeName(`${'é'.repeat(200)}.jpg`), /\.jpg$/);
   assert.equal((await upload('../..', [['x.txt', 'x', 'text/plain']])).status, 400);
   assert.equal((await upload('Nope', [['x.txt', 'x', 'text/plain']])).status, 404);
+});
+
+test('chunked upload: a file arrives in pieces, resumes, and lands in its folder', async () => {
+  const data = crypto.randomBytes(250_000);
+  const file = { path: 'Photos', name: 'clip.bin', size: data.length, lastModified: 1_700_000_000_000 };
+  let res = await startUpload(file);
+  assert.equal(res.status, 200);
+  const { id, offset, chunkSize } = await res.json();
+  assert.equal(offset, 0);
+  assert.equal(chunkSize, Math.floor(0.1 * 1024 * 1024));
+
+  res = await putChunk(id, 0, data.subarray(0, chunkSize));
+  assert.deepEqual([res.status, await res.json()], [200, { offset: chunkSize }]);
+
+  res = await putChunk(id, 0, data.subarray(0, 10)); // stale offset: told where to continue
+  assert.deepEqual([res.status, (await res.json()).offset], [409, chunkSize]);
+  res = await putChunk(id, chunkSize, data.subarray(chunkSize, 2 * chunkSize + 1)); // one byte too many
+  assert.equal(res.status, 413);
+  assert.deepEqual(await (await api('GET', `/api/uploads/${id}`)).json(), { offset: chunkSize, size: data.length });
+
+  // Adding the same file again (e.g. after the tab was closed) picks up where it stopped.
+  assert.deepEqual(await (await startUpload(file)).json(), { id, offset: chunkSize, chunkSize });
+  assert.notEqual((await (await startUpload({ ...file, lastModified: 1 })).json()).id, id); // a different file
+
+  res = await putChunk(id, chunkSize, data.subarray(chunkSize, 2 * chunkSize));
+  assert.deepEqual(await res.json(), { offset: 2 * chunkSize });
+  res = await putChunk(id, 2 * chunkSize, data.subarray(2 * chunkSize));
+  assert.equal(res.status, 201);
+  const body = await res.json();
+  assert.equal(body.offset, data.length);
+  assert.deepEqual([body.file.path, body.file.size], ['Photos/clip.bin', data.length]);
+  assert.ok(fs.readFileSync(path.join(config.storageDir, 'Photos/clip.bin')).equals(data));
+  assert.equal((await api('GET', `/api/uploads/${id}`)).status, 404);
+  await api('DELETE', `/api/uploads/${(await (await startUpload({ ...file, lastModified: 1 })).json()).id}`);
+  assert.deepEqual(fs.readdirSync(config.resumableDir), []);
+});
+
+test('chunked upload: empty and JSON files, limits, and cancelling', async () => {
+  let { id } = await (await startUpload({ path: 'Photos', name: 'empty.txt', size: 0 })).json();
+  let res = await putChunk(id, 0, Buffer.alloc(0));
+  assert.deepEqual([res.status, (await res.json()).file.size], [201, 0]);
+
+  const json = Buffer.from('{"stored":"not parsed"}'); // a .json file's bytes must not hit the JSON body parser
+  ({ id } = await (await startUpload({ path: 'Photos', name: 'data.json', size: json.length })).json());
+  res = await putChunk(id, 0, json, 'application/json');
+  assert.equal(res.status, 201);
+  assert.equal(fs.readFileSync(path.join(config.storageDir, 'Photos/data.json'), 'utf8'), json.toString());
+
+  assert.equal((await startUpload({ path: 'Photos', name: 'huge.bin', size: 1024 * 1024 + 1 })).status, 413);
+  assert.equal((await startUpload({ path: 'Photos', name: 'x', size: -1 })).status, 400);
+  assert.equal((await startUpload({ path: 'Nope', name: 'x', size: 1 })).status, 404);
+  assert.equal((await startUpload({ path: '../..', name: 'x', size: 1 })).status, 400);
+  assert.equal((await putChunk('0'.repeat(32), 0, Buffer.from('x'))).status, 404);
+  assert.equal((await putChunk('..%2F..%2Fetc', 0, Buffer.from('x'))).status, 404);
+  assert.equal((await api('PUT', `/api/uploads/${'0'.repeat(32)}`, { body: 'x' })).status, 404);
+
+  ({ id } = await (await startUpload({ path: 'Photos', name: 'gone.bin', size: 10 })).json());
+  await putChunk(id, 0, Buffer.from('12345'));
+  assert.equal((await api('DELETE', `/api/uploads/${id}`)).status, 204);
+  assert.equal((await api('GET', `/api/uploads/${id}`)).status, 404);
+  assert.deepEqual(fs.readdirSync(config.resumableDir), []);
+});
+
+test('unfinished chunked uploads survive a restart and expire after a day', async () => {
+  const { id } = await (await startUpload({ path: 'Photos', name: 'later.bin', size: 10 })).json();
+  await putChunk(id, 0, Buffer.from('abc'));
+  fs.writeFileSync(path.join(config.tmpDir, 'interrupted.part'), 'x'); // from a single-request upload
+
+  const restarted = await createContext(config, { log: silent });
+  try {
+    assert.deepEqual(tmpLeftovers(), []);
+    assert.equal(await restarted.resumable.offset({ id }), 3);
+    assert.equal(await restarted.resumable.prune(), 0);
+    assert.equal(await restarted.resumable.prune(Date.now() + RESUMABLE_TTL_MS + 1000), 1);
+    assert.deepEqual(fs.readdirSync(config.resumableDir), []);
+  } finally {
+    restarted.close();
+  }
 });
 
 test('files over the size limit are rejected and cleaned up', async () => {

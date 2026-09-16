@@ -91,7 +91,9 @@ function UploadRow({ item, onCancel, onRetry }: { item: UploadItem; onCancel: (i
   const percent = file.size ? Math.min(100, Math.round((loaded / file.size) * 100)) : 0;
   const detail = {
     queued: 'Waiting…',
-    uploading: `${percent}% · ${formatBytes(loaded)} of ${formatBytes(file.size)}`,
+    uploading: item.reconnecting
+      ? `Reconnecting… ${percent}% saved, will continue`
+      : `${percent}% · ${formatBytes(loaded)} of ${formatBytes(file.size)}`,
     done: `${formatBytes(file.size)} · Uploaded`,
     error: item.error ?? 'Failed',
     cancelled: 'Cancelled',
