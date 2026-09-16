@@ -43,6 +43,13 @@ const server = createApp(ctx).listen(config.port, config.host, (err) => {
         if (made) console.log(`Generated ${made} missing thumbnails/previews in ${Math.round((Date.now() - started) / 1000)}s`);
       });
     })
+    .then(() => {
+      // Then streaming versions of videos, one at a time (each can take minutes on a phone).
+      const started = Date.now();
+      return ctx.streams.backfill(ctx.repo.videos()).then((made) => {
+        if (made) console.log(`Made streaming versions of ${made} videos in ${Math.round((Date.now() - started) / 1000)}s`);
+      });
+    })
     .catch((err) => console.error('Background thumbnail/preview generation failed:', err));
 });
 

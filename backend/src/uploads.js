@@ -101,10 +101,10 @@ async function saveFile(stream, filename, ctx, parentPath, parentAbs, ownerId) {
 
 /**
  * Move a fully received file into its folder under a free name, index it, and start making its
- * thumbnail/preview. Shared by single-request and chunked uploads. Resolves to the new row.
+ * thumbnail/preview (or, for a video, its streaming version). Shared by single-request and chunked uploads. Resolves to the new row.
  */
 export async function commitFile(ctx, tmp, parentPath, parentAbs, name, ownerId) {
-  const { repo, thumbs } = ctx;
+  const { repo, thumbs, streams } = ctx;
   const { size } = await fsp.stat(tmp);
   const finalName = await moveIntoPlace(tmp, parentAbs, name);
   const { row, replacedIds } = repo.replace({
@@ -116,8 +116,9 @@ export async function commitFile(ctx, tmp, parentPath, parentAbs, name, ownerId)
     createdAt: Date.now(),
     ownerId,
   });
-  if (replacedIds.length) await thumbs.remove(replacedIds);
+  if (replacedIds.length) await Promise.all([thumbs.remove(replacedIds), streams.remove(replacedIds)]);
   thumbs.warm(row);
+  streams.warm(row);
   return row;
 }
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -14,6 +15,7 @@ import { buildConfig } from '../src/config.js';
 import { createContext } from '../src/context.js';
 import { sanitizeName } from '../src/paths.js';
 import { RESUMABLE_TTL_MS } from '../src/resumable.js';
+import { planRenditions } from '../src/streams.js';
 import { wantsPreview } from '../src/thumbnails.js';
 
 const PASSWORD = 'correct horse battery';
@@ -410,6 +412,60 @@ test('the viewer uses previews only for large or non-browser image formats', () 
   assert.equal(wantsPreview({ mime: 'image/gif', size: 5 * MB }), false);
   assert.equal(wantsPreview({ mime: 'image/svg+xml', size: 5 * MB }), false);
   assert.equal(wantsPreview({ mime: 'text/plain', size: 5 * MB }), false);
+});
+
+const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
+
+test('videos get an adaptive streaming version in two qualities', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const src = path.join(tmp, 'clip.mp4');
+  execFileSync('ffmpeg', [
+    ...['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=60:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3'],
+    ...['-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '150k', '-c:a', 'aac', '-shortest', src],
+  ]);
+  const video = (await (await upload('Photos', [['clip.mp4', fs.readFileSync(src), 'video/mp4']])).json()).files[0];
+
+  let res;
+  for (let i = 0; i < 240; i++) {
+    res = await api('GET', `/api/files/${video.id}/stream/master.m3u8`);
+    if (res.status === 200) break;
+    assert.deepEqual([res.status, (await res.json()).status], [404, 'processing']);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'application/vnd.apple.mpegurl');
+  const master = await res.text();
+  assert.match(master, /RESOLUTION=854x480[^\n]*\nlow\/index\.m3u8/);
+  assert.match(master, /RESOLUTION=1280x720[^\n]*\nhigh\/index\.m3u8/);
+
+  const playlist = await (await api('GET', `/api/files/${video.id}/stream/high/index.m3u8`)).text();
+  const segment = /seg_\d+\.ts/.exec(playlist)[0];
+  res = await api('GET', `/api/files/${video.id}/stream/high/${segment}`);
+  assert.deepEqual([res.status, res.headers.get('content-type')], [200, 'video/mp2t']);
+  const frames = JSON.parse(
+    execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,r_frame_rate', '-of', 'json', '-'], {
+      input: Buffer.from(await res.arrayBuffer()),
+    }),
+  ).streams;
+  assert.deepEqual(frames.map((s) => s.codec_name).sort(), ['aac', 'h264']);
+  assert.equal(frames.find((s) => s.codec_name === 'h264').r_frame_rate, '30/1'); // 60 fps capped at 30
+
+  for (const rel of ['secret.txt', 'high/..%2F..%2Fcloud-drive.db', 'low/index.m3u8.bak']) {
+    assert.equal((await api('GET', `/api/files/${video.id}/stream/${rel}`)).status, 404, rel);
+  }
+  const txt = (await list('Photos')).find((e) => e.name === 'a.txt');
+  res = await api('GET', `/api/files/${txt.id}/stream/master.m3u8`);
+  assert.deepEqual([res.status, (await res.json()).status], [404, 'unavailable']);
+
+  assert.equal((await api('DELETE', `/api/entries/${video.id}`)).status, 200);
+  assert.ok(!fs.existsSync(path.join(config.streamDir, String(video.id))));
+});
+
+test('streaming qualities follow the short side, so portrait videos match landscape ones', () => {
+  const sides = (w, h) => planRenditions({ width: w, height: h }).map((r) => r.shortSide);
+  assert.deepEqual(sides(3840, 2160), [480, 1080]);
+  assert.deepEqual(sides(1080, 1920), [480, 1080]);
+  assert.deepEqual(sides(1280, 720), [480, 720]);
+  assert.deepEqual(sides(640, 360), [360]);
 });
 
 // --- search / listing ---

@@ -129,7 +129,7 @@ function PreviewContent({ entry }: { entry: Entry }) {
     case 'image':
       return <ImagePreview entry={entry} />;
     case 'video':
-      return <video src={urls.raw(entry)} controls autoPlay playsInline className="max-h-full max-w-full" />;
+      return <VideoPreview entry={entry} />;
     case 'audio':
       return (
         <div className="flex flex-col items-center gap-8 p-6">
@@ -211,6 +211,105 @@ function ImagePreview({ entry }: { entry: Entry }) {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Plays the adaptive streaming version (HLS, 480p–1080p) when the server has made it: natively in
+ * Safari, through hls.js elsewhere (loaded only when a video is opened). Until then — or if the
+ * browser can't do HLS — it plays the original file.
+ */
+function VideoPreview({ entry }: { entry: Entry }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [source, setSource] = useState<'checking' | 'stream' | 'original'>('checking');
+  const [preparing, setPreparing] = useState(false);
+  const [unplayable, setUnplayable] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const ctrl = new AbortController();
+    let player: { destroy(): void } | null = null;
+    const playOriginal = (streamComing: boolean) => {
+      setPreparing(streamComing);
+      setSource('original');
+    };
+
+    (async () => {
+      const master = urls.stream(entry);
+      const res = await fetch(master, { signal: ctrl.signal }).catch(() => null);
+      if (ctrl.signal.aborted) return;
+      if (!res?.ok) {
+        const body = await res?.json().catch(() => null);
+        return playOriginal(body?.status === 'processing');
+      }
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = master; // Safari and iOS play HLS themselves
+        return setSource('stream');
+      }
+      const { default: Hls } = await import('hls.js/light');
+      if (ctrl.signal.aborted) return;
+      if (!Hls.isSupported()) return playOriginal(false);
+      const hls = new Hls({ capLevelToPlayerSize: true });
+      player = hls;
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        hls.destroy();
+        player = null;
+        playOriginal(false);
+      });
+      hls.loadSource(master);
+      hls.attachMedia(video);
+      setSource('stream');
+    })();
+
+    return () => {
+      ctrl.abort();
+      player?.destroy();
+    };
+  }, [entry]);
+
+  if (unplayable) {
+    return (
+      <NoPreview
+        entry={entry}
+        reason={
+          preparing
+            ? 'Your browser can’t play this video’s format. A version that plays everywhere is being prepared — try again in a few minutes.'
+            : 'Your browser can’t play this video.'
+        }
+      />
+    );
+  }
+  return (
+    <div className="flex max-h-full max-w-full flex-col items-center">
+      {source === 'checking' && <Spinner className="absolute size-8 text-white/60" />}
+      <video
+        ref={videoRef}
+        src={source === 'original' ? urls.raw(entry) : undefined}
+        controls
+        autoPlay
+        playsInline
+        onError={() => {
+          if (source === 'original') setUnplayable(true);
+          else if (source === 'stream') setSource('original'); // native HLS failed: fall back to the file
+        }}
+        onLoadedMetadata={(e) => {
+          // A browser without HEVC support (Chrome on most PCs, Firefox) plays a phone video's sound
+          // over a blank picture instead of failing: treat "loaded but no picture" as unplayable.
+          if (source === 'original' && e.currentTarget.videoWidth === 0) {
+            e.currentTarget.pause();
+            setUnplayable(true);
+          }
+        }}
+        className="max-h-full max-w-full min-h-0"
+      />
+      {source === 'original' && preparing && (
+        <p className="shrink-0 px-4 pt-2 text-center text-xs text-white/60">
+          Playing the original. A faster streaming version is being prepared.
+        </p>
+      )}
+    </div>
   );
 }
 

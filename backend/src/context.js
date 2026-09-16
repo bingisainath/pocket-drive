@@ -8,6 +8,7 @@ import { createRepo, openDatabase } from './db.js';
 import { createGoogleAuth } from './google.js';
 import { createResumableUploads } from './resumable.js';
 import { createScanner } from './scanner.js';
+import { createStreamer } from './streams.js';
 import { createThumbnailer } from './thumbnails.js';
 import { createUserStore } from './users.js';
 
@@ -15,7 +16,7 @@ import { createUserStore } from './users.js';
 export async function createContext(config, { log = console, fetchImpl } = {}) {
   const passwordHash = parsePasswordHash(config.passwordHash);
 
-  for (const dir of [config.dataDir, config.storageDir, config.thumbDir]) {
+  for (const dir of [config.dataDir, config.storageDir, config.thumbDir, config.streamDir]) {
     await fsp.mkdir(dir, { recursive: true });
   }
   // Leftovers from interrupted single-request uploads. Chunked uploads are kept so they can resume.
@@ -35,6 +36,7 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
   sessions.resetIfPasswordChanged(config.passwordHash);
   sessions.prune();
   const thumbs = createThumbnailer(config);
+  const streams = createStreamer({ ...config, log });
   const resumable = createResumableUploads({ dir: config.resumableDir, chunkBytes: config.uploadChunkBytes });
   await resumable.prune();
 
@@ -49,9 +51,10 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
     activity,
     sessions,
     thumbs,
+    streams,
     resumable,
     google: createGoogleAuth(config, { fetchImpl }),
-    scanner: createScanner({ config, repo, shares, thumbs, log }),
+    scanner: createScanner({ config, repo, shares, thumbs, streams, log }),
     limiter: createLoginLimiter({ maxAttempts: config.loginMaxAttempts, windowMs: config.loginWindowMs }),
     close: () => db.close(),
   };

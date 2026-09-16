@@ -33,7 +33,7 @@ async function diskUsage(dir) {
 // Every route here checks the signed-in user's access. Anything a user may not see answers
 // 404, exactly like something that doesn't exist, so private folders can't even be detected.
 export function fileRoutes(ctx) {
-  const { config, repo, thumbs, scanner, shares, activity, resumable } = ctx;
+  const { config, repo, thumbs, streams, scanner, shares, activity, resumable } = ctx;
   const router = Router();
 
   router.use((req, res, next) => {
@@ -274,13 +274,30 @@ export function fileRoutes(ctx) {
     sendFile(res, next, preview, { 'Content-Type': 'image/webp', 'Cache-Control': 'private, max-age=2592000, immutable' });
   });
 
+  // Adaptive streaming (HLS) of a video: master.m3u8, then each quality's playlist and segments.
+  // Until the streaming version exists this answers 404 with `status` ('processing' or
+  // 'unavailable'), and the app plays the original file instead.
+  router.get('/files/:id/stream/*rel', async (req, res, next) => {
+    const row = requireEntry(req, { file: true });
+    const status = await streams.status(row);
+    if (status !== 'ready') {
+      res.set('Cache-Control', 'no-store');
+      return res.status(404).json({ error: 'No streaming version yet', status });
+    }
+    const rel = [].concat(req.params.rel).join('/');
+    const file = streams.file(row, rel);
+    if (!file) throw new HttpError(404, 'Not found');
+    const type = rel.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t';
+    sendFile(res, next, file, { 'Content-Type': type, 'Cache-Control': 'private, max-age=2592000, immutable' });
+  });
+
   router.delete('/entries/:id', async (req, res) => {
     const row = requireEntry(req);
     if (!canDelete(req.access, row)) throw new HttpError(403, 'You don’t have permission to delete this');
     await fsp.rm(absOf(row), { recursive: true, force: true });
     const ids = repo.deleteTree(row);
     if (row.is_dir === 1) shares.removeUnder(fullPathOf(row));
-    await thumbs.remove(ids);
+    await Promise.all([thumbs.remove(ids), streams.remove(ids)]);
     activity.log(actor(req), 'delete', { path: fullPathOf(row), detail: { items: ids.length, folder: row.is_dir === 1 } });
     res.json({ deleted: ids.length });
   });

@@ -8,7 +8,7 @@ import { joinRel } from './paths.js';
  * Reconciles the SQLite index with what's actually on disk (the source of truth), so files added,
  * changed or removed outside the app (e.g. from Termux) show up correctly.
  */
-export function createScanner({ config, repo, shares, thumbs, log }) {
+export function createScanner({ config, repo, shares, thumbs, streams, log }) {
   let running = null;
 
   async function scan() {
@@ -62,7 +62,8 @@ export function createScanner({ config, repo, shares, thumbs, log }) {
     }
     const { inserted, replacedIds } = repo.applyScan(upserts, staleIds, snapshot);
     if (staleIds.length) shares.pruneOrphans(); // folders deleted outside the app lose their shares
-    await thumbs.remove([...staleIds, ...replacedIds]);
+    const gone = [...staleIds, ...replacedIds];
+    await Promise.all([thumbs.remove(gone), streams.remove(gone)]);
     return { added: inserted - replacedIds.length, updated: replacedIds.length, removed: staleIds.length };
   }
 

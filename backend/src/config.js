@@ -78,6 +78,9 @@ export function buildConfig(env = process.env) {
     thumbDir: path.join(dataDir, 'thumbs'),
     // External tools, looked up on PATH unless given as absolute paths.
     heifDecoder: env.HEIF_DECODER || 'heif-dec',
+    ffmpeg: env.FFMPEG || 'ffmpeg',
+    ffprobe: env.FFPROBE || 'ffprobe',
+    streamDir: path.join(dataDir, 'streams'),
     dbPath: path.join(dataDir, 'cloud-drive.db'),
     frontendDist: path.resolve(expandHome(env.FRONTEND_DIST || path.join(BACKEND_ROOT, '..', 'frontend', 'dist'))),
     passwordHash: (env.PASSWORD_HASH || '').trim(),

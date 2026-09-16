@@ -76,6 +76,8 @@ export const urls = {
   download: (e: Entry) => `/api/files/${e.id}/download`,
   thumb: (e: Entry) => `/api/files/${e.id}/thumb`,
   preview: (e: Entry) => `/api/files/${e.id}/preview`,
+  /** Adaptive (HLS) streaming version of a video; 404 until the server has made it. */
+  stream: (e: Entry) => `/api/files/${e.id}/stream/master.m3u8`,
 };
 
 /** Starts "Sign in with Google" from this address, coming back to `returnTo` afterwards. */

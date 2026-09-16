@@ -9,6 +9,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "hls.js": "^1.7.3",
     "lucide-react": "^1.45.0",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
