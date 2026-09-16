@@ -342,6 +342,27 @@ test('rescan picks up files added or removed outside the app', async () => {
   assert.deepEqual(await (await api('POST', '/api/rescan')).json(), { added: 0, updated: 0, removed: 0 });
 });
 
+test('background generation fills in missing thumbnails and previews once', async () => {
+  // TIFF always gets a preview (browsers can't show it), even when small.
+  const tiff = await sharp({ create: { width: 300, height: 200, channels: 3, background: '#357' } }).tiff().toBuffer();
+  fs.writeFileSync(path.join(config.storageDir, 'scan.tiff'), tiff);
+  await api('POST', '/api/rescan');
+  const row = ctx.repo.images().find((r) => r.name === 'scan.tiff');
+  assert.ok(row);
+  const thumb = path.join(config.thumbDir, `${row.id}.webp`);
+  const preview = path.join(config.thumbDir, `${row.id}-preview.webp`);
+  assert.ok(!fs.existsSync(thumb) && !fs.existsSync(preview));
+
+  const skipped = await ctx.thumbs.backfill([row], () => false); // deleted/replaced meanwhile
+  assert.equal(skipped, 0);
+  assert.ok(!fs.existsSync(thumb));
+
+  const made = await ctx.thumbs.backfill(ctx.repo.images());
+  assert.ok(made >= 2);
+  assert.ok(fs.existsSync(thumb) && fs.existsSync(preview));
+  assert.equal(await ctx.thumbs.backfill(ctx.repo.images()), 0); // nothing left to do
+});
+
 // --- delete ---
 
 test('deleting a folder removes everything beneath it', async () => {

@@ -49,15 +49,19 @@ export function createThumbnailer({ thumbDir, storageDir }) {
   const inflight = new Map(); // "variant:id" -> Promise<path|null>
   const failed = new Set(); // "variant:id" sharp couldn't decode (e.g. HEVC-encoded HEIC); don't retry until restart
   const waiting = [];
+  const idleWaiters = [];
   let active = 0;
+  let backfilling = null;
 
   const acquire = () =>
     active < MAX_PARALLEL ? (active++, Promise.resolve()) : new Promise((resolve) => waiting.push(resolve));
   const release = () => {
     const next = waiting.shift();
     if (next) next();
-    else active--;
+    else if (--active === 0) idleWaiters.splice(0).forEach((resolve) => resolve());
   };
+  const whenIdle = () => (active === 0 ? Promise.resolve() : new Promise((resolve) => idleWaiters.push(resolve)));
+  const exists = (file) => fsp.access(file).then(() => true, () => false);
 
   async function render(row, variant, key, out) {
     await acquire();
@@ -102,6 +106,31 @@ export function createThumbnailer({ thumbDir, storageDir }) {
       get(row, 'thumb')
         .then(() => wantsPreview(row) && get(row, 'preview'))
         .catch(() => {});
+    },
+    /**
+     * Render every missing thumbnail and preview, one at a time and only while nothing else is
+     * rendering, so photos someone is opening right now never wait behind it. `isCurrent(row)` is
+     * checked just before each render to skip files deleted or replaced meanwhile. Resolves to the
+     * number of images made; a second call while one is running joins it.
+     */
+    backfill(rows, isCurrent = () => true) {
+      backfilling ??= (async () => {
+        let made = 0;
+        for (const row of rows) {
+          for (const variant of ['thumb', 'preview']) {
+            const wanted = variant === 'thumb' ? canThumbnail(row.mime) : wantsPreview(row);
+            if (!wanted || failed.has(`${variant}:${row.id}`)) continue;
+            if (await exists(path.join(thumbDir, VARIANTS[variant].file(row.id)))) continue;
+            await whenIdle();
+            if (!isCurrent(row)) break;
+            if (await get(row, variant)) made++;
+          }
+        }
+        return made;
+      })().finally(() => {
+        backfilling = null;
+      });
+      return backfilling;
     },
     async remove(ids) {
       const files = ids.flatMap((id) => Object.values(VARIANTS).map((v) => path.join(thumbDir, v.file(id))));

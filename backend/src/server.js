@@ -34,7 +34,16 @@ const server = createApp(ctx).listen(config.port, config.host, (err) => {
   ctx.scanner
     .run()
     .then((r) => console.log(`Index synced with disk (+${r.added} ~${r.updated} -${r.removed})`))
-    .catch((scanErr) => console.error('Initial disk scan failed:', scanErr));
+    .catch((scanErr) => console.error('Initial disk scan failed:', scanErr))
+    .then(() => {
+      // Make missing thumbnails/previews in the background, so opening a photo never waits on one.
+      const started = Date.now();
+      const isCurrent = (row) => ctx.repo.get(row.id)?.size === row.size;
+      return ctx.thumbs.backfill(ctx.repo.images(), isCurrent).then((made) => {
+        if (made) console.log(`Generated ${made} missing thumbnails/previews in ${Math.round((Date.now() - started) / 1000)}s`);
+      });
+    })
+    .catch((err) => console.error('Background thumbnail/preview generation failed:', err));
 });
 
 // Big uploads over mobile links can take far longer than Node's 5-minute request default.

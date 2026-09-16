@@ -138,6 +138,7 @@ export function createRepo(db) {
       WHERE (parent_path = @full OR substr(parent_path, 1, length(@prefix)) = @prefix)
         AND (owner_id IS NULL OR owner_id != @uid)`),
     all: db.prepare('SELECT id, parent_path, name, is_dir, size FROM entries'),
+    images: db.prepare(`SELECT id, parent_path, name, mime, size FROM entries WHERE is_dir = 0 AND mime LIKE 'image/%' ORDER BY created_at DESC`),
     stats: db.prepare(`
       SELECT COALESCE(SUM(size), 0) AS bytes,
              COALESCE(SUM(is_dir = 0), 0) AS files,
@@ -182,6 +183,8 @@ export function createRepo(db) {
     },
 
     stats: () => q.stats.get(),
+    /** Every image, newest first (for filling in missing thumbnails and previews). */
+    images: () => q.images.all(),
     /** Map of relative path -> row, used by the disk scanner. */
     snapshot: () => new Map(q.all.all().map((r) => [joinRel(r.parent_path, r.name), r])),
 

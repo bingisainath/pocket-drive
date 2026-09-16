@@ -3,7 +3,7 @@ import { Suspense, lazy, useEffect, useRef, useState, type TouchEvent } from 're
 import { createPortal } from 'react-dom';
 import { urls } from '../api';
 import { useOverlay } from '../hooks/useOverlay';
-import { previewKind, wantsPreview } from '../lib/entries';
+import { hasThumbnail, previewKind, wantsPreview } from '../lib/entries';
 import { formatBytes, formatDateTime } from '../lib/format';
 import type { Entry } from '../types';
 import { FileIcon } from './FileIcon';
@@ -189,15 +189,27 @@ function ImagePreview({ entry }: { entry: Entry }) {
   if (state === 'error') return <NoPreview entry={entry} reason="Your browser can’t display this image format." />;
   return (
     <>
-      {state === 'loading' && <Spinner className="absolute size-8 text-white/60" />}
       <img
         src={src}
         alt={entry.name}
         draggable={false}
         onLoad={() => setState('ready')}
         onError={onError}
-        className={`max-h-full max-w-full object-contain transition-opacity duration-200 select-none ${state === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+        className={`relative z-[1] max-h-full max-w-full object-contain transition-opacity duration-200 select-none ${state === 'ready' ? 'opacity-100' : 'opacity-0'}`}
       />
+      {state === 'loading' && (
+        <>
+          {/* The grid thumbnail is already in the browser cache: show it blurred straight away, so the
+              photo appears instantly while the sharp version downloads. (After the main image in the
+              DOM, so tests and code that look for the photo find the real one.) */}
+          {hasThumbnail(entry) && (
+            <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+              <img src={urls.thumb(entry)} alt="" draggable={false} className="aspect-square max-h-full w-full max-w-full object-cover blur-[2px]" />
+            </div>
+          )}
+          <Spinner className="absolute size-8 text-white/60" />
+        </>
+      )}
     </>
   );
 }
