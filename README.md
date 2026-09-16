@@ -5,11 +5,15 @@ files from any device, and share folders with friends. One Node.js process serve
 the web app on a single port, so you can point `tailscale serve` / `tailscale funnel` straight at it.
 
 - **Upload** by drag-and-drop or file picker, many files at once, with per-file progress, cancel and retry.
-  Uploads stream straight to disk (constant memory — a 1 GB file uses ~3 MB of RAM).
+  Files go up in resumable 16 MB chunks: a dropped connection continues where it stopped, adding the same
+  file again after closing the tab resumes it, and files of any size get through Cloudflare's 100 MB
+  request limit. Chunks stream straight to disk (constant memory).
 - **Browse** in a thumbnail grid or a list, sorted newest first (or by name, size, or oldest first),
   with folders, breadcrumbs and search.
-- **Preview** images, video, audio, PDFs and text files in the browser. Swipe or use the arrow keys to
-  move between photos.
+- **Preview** images, video, audio, PDFs and text files in the browser. Photos open as fast, screen-sized
+  previews (iPhone HEIC included), with the original loaded when you zoom in. Videos stream adaptively
+  (480p–1080p, like YouTube), so they start quickly and play in every browser, even the HEVC videos
+  phones record. Swipe or use the arrow keys to move between photos.
 - **Delete** files and folders, with a confirmation step.
 - **Share folders with friends** by email. Everyone signs in with Google, and each person gets a role
   per folder: Viewer, Contributor or Editor. Folders you don't share stay invisible to them.
@@ -25,6 +29,7 @@ Inside Termux → `proot-distro login debian`, with Node.js ≥ 20.12:
 
 ```bash
 cd ~/cloud-drive
+apt install ffmpeg libheif-examples libheif-plugin-libde265  # video streaming + iPhone HEIC photos
 npm run setup          # install backend + frontend dependencies
 npm run hash-password  # choose the owner's backup password (saved as a hash in backend/.env)
 npm run build          # build the web app into frontend/dist
@@ -58,6 +63,33 @@ Android kills background apps aggressively. To keep the server alive:
 - Turn off battery optimization for Termux in Android settings.
 - Best: run it as a Termux service (`termux-services`), so it restarts on its own when it crashes and
   whenever Termux starts. A quick alternative is `tmux new -s drive 'npm start'`.
+
+### Watchdog
+
+runit restarts a service whose process dies, but not one that keeps running while no longer working:
+Tailscale stuck "network is down" after a Wi-Fi drop, a tunnel that lost its connections, or a frozen
+server. [`ops/watchdog/run`](ops/watchdog/run) is a runit service that checks every minute that the drive
+(`/api/health`), the portfolio, `cloudflared` (its `/ready` endpoint) and `tailscaled` answer. After 3
+failed checks in a row it restarts the service, and kills it if it won't stop. Tailscale and cloudflared
+only count as failing while the phone itself is online. Services stopped on purpose with `sv down` are
+left alone, and nothing is checked in its first 5 minutes after starting. Install it from Termux:
+
+```bash
+cp -r $PREFIX/var/lib/proot-distro/containers/debian/rootfs/root/cloud-drive/ops/watchdog $PREFIX/var/service/
+sv status watchdog                         # runit picks it up within a few seconds
+tail -f $PREFIX/var/log/sv/watchdog/current
+```
+
+`INTERVAL`, `FAIL_LIMIT`, `GRACE` and `CHECKS` can be set at the top of the `run` script's environment;
+`DRY_RUN=1 ONCE=1 GRACE=0 ops/watchdog/run` checks everything once without restarting anything.
+
+### Monitoring
+
+Point a free uptime monitor such as [UptimeRobot](https://uptimerobot.com) at
+`https://<your address>/api/health` (HTTP monitor, 5-minute interval, email alerts). It answers
+`{"status":"ok"}` when the database works and storage has room, and nothing else, so it's safe to leave
+public. Checked from outside, it catches everything the phone can't report itself: the phone off or
+offline, the tunnel down, or the server gone.
 
 ## Sharing with friends (Google sign-in)
 
@@ -134,6 +166,9 @@ All settings live in `backend/.env`. `npm run hash-password` creates this file f
 | `DATA_DIR`                | `~/cloud-storage` | Holds `files/`, the SQLite database, and the thumbnail cache.           |
 | `STORAGE_DIR`             | `$DATA_DIR/files` | Where your files actually live (see below).                             |
 | `MAX_UPLOAD_MB`           | `4096`            | Per-file limit.                                                         |
+| `UPLOAD_CHUNK_MB`         | `16`              | Size of each upload request. Keep it under your proxy's limit (Cloudflare free: 100 MB). |
+| `FFMPEG` / `FFPROBE`      | `ffmpeg` / `ffprobe` | Used to make streaming versions of videos. Without them, videos play as uploaded. |
+| `HEIF_DECODER`            | `heif-dec`        | libheif's decoder, for iPhone HEIC photos sharp can't read.             |
 | `MIN_FREE_MB`             | `500`             | Uploads are refused if they'd leave less than this free on the device. |
 | `SESSION_DAYS`            | `30`              | Sessions extend automatically while you keep using the app.            |
 | `LOGIN_MAX_ATTEMPTS`      | `10`              | Failed password logins per IP, per window, before a temporary lockout.  |
@@ -167,8 +202,10 @@ cloud-drive/
 │   │   ├── google.js      # "Sign in with Google" (OpenID Connect with PKCE, state and nonce)
 │   │   ├── activity.js    # the activity log
 │   │   ├── uploads.js     # streaming multipart → temp file → atomic rename
+│   │   ├── resumable.js   # chunked, resumable uploads (partial files kept for 24 h)
 │   │   ├── scanner.js     # re-syncs the SQLite index with what's on disk
-│   │   ├── thumbnails.js  # sharp → 400px WebP, cached on disk
+│   │   ├── thumbnails.js  # sharp → 400px thumbnails + 1600px previews (WebP), HEIC via libheif
+│   │   ├── streams.js     # ffmpeg → adaptive HLS (480p + up to 1080p) for videos
 │   │   ├── db.js          # SQLite schema, migrations + queries (better-sqlite3)
 │   │   ├── auth.js        # scrypt hashing, sessions, login throttling
 │   │   └── paths.js       # filename sanitizing + path traversal protection
@@ -179,7 +216,8 @@ cloud-drive/
 │       ├── components/    # Drive, grid/list views, previewer, Share/People/Activity dialogs, upload panel
 │       ├── hooks/         # upload queue, long-press, URL-synced folder path, overlays
 │       └── api.ts         # typed API client (XHR for uploads, to get progress)
-└── e2e/run.mjs            # headless-Chromium end-to-end test
+├── e2e/run.mjs            # headless-Chromium end-to-end test
+└── ops/watchdog/          # runit service that restarts hung services on the phone
 ```
 
 - **Your files are real files.** A folder in the app is a real folder under `STORAGE_DIR`, and each file
@@ -188,14 +226,23 @@ cloud-drive/
 - **SQLite holds the index plus accounts.** The index covers names, sizes, types, upload dates and
   folder paths, and is re-synced with the disk on every start and from *⋮ → Sync with disk*. Accounts,
   shares, sessions and the activity log live alongside it.
-- **Uploads** stream to a hidden temp directory on the same filesystem, then are atomically renamed into
-  place. They never overwrite anything: a name clash becomes `photo (1).jpg`. Interrupted uploads are
-  cleaned up.
+- **Uploads** arrive in chunks (`POST /api/uploads`, then `PUT /api/uploads/:id` with `Upload-Offset`)
+  into a hidden directory on the same filesystem, then are atomically renamed into place. They never
+  overwrite anything: a name clash becomes `photo (1).jpg`. A partial upload belongs to the user, folder,
+  name, size and modification time, so adding the same file again resumes it; untouched partials are
+  deleted after 24 hours.
 - **Previews are sandboxed.** Images, video, audio and PDF are served inline. HTML and SVG are served
   inside a CSP sandbox so they can't run scripts on your drive's origin. Everything else downloads.
-- **Thumbnails** are generated on upload, or the first time they're viewed, and cached in
-  `DATA_DIR/thumbs`. iPhone HEIC photos can't be decoded by sharp's prebuilt binary (it lacks the HEVC
-  codec), so they show an icon instead. Their downloads are unaffected.
+- **Thumbnails and previews** (400px and 1600px WebP) are generated on upload, for anything missing in
+  the background after startup, or the first time they're viewed, and cached in `DATA_DIR/thumbs`. iPhone
+  HEIC photos are HEVC-coded, which sharp's prebuilt binary can't decode, so they go through libheif's
+  `heif-dec` first.
+- **Videos** get an adaptive streaming version in `DATA_DIR/streams/<id>`: HLS in two qualities by the
+  picture's short side (480p, plus the source's size up to 1080p), H.264/AAC in 4-second segments, at most
+  30 fps. ffmpeg makes them one at a time at low CPU priority, after upload and for older videos after
+  startup. A phone's CPU needs roughly 2 minutes per minute of 1080p video, and ~10 per minute of 4K. The
+  player uses hls.js (or Safari's built-in HLS) and plays the original until the streaming version is
+  ready.
 
 To put the files in Android shared storage, so they show up in the phone's Files app, run
 `termux-setup-storage` and set `STORAGE_DIR` to a folder there, for example `/sdcard/CloudDrive`. The
@@ -250,3 +297,9 @@ npm run test:e2e
   `npm run setup` again. `better-sqlite3` is pinned to v11 because v12 and later require Node ≥ 22.
 - **Uploads fail through Tailscale Funnel but work locally**: check the Tailscale logs for proxy limits,
   and try `tailscale serve` (tailnet-only) to narrow down whether Funnel is the cause.
+- **A video says "a version that plays everywhere is being prepared"**: your browser can't decode the
+  original (usually HEVC). Its streaming version is still converting; the log line
+  `Streaming version of "…" ready` shows when it's done. `No streaming version for "…"` means ffmpeg
+  failed or isn't installed.
+- **A service keeps restarting**: `tail $PREFIX/var/log/sv/watchdog/current` shows which check failed.
+  Stop the watchdog with `sv down watchdog` while debugging.

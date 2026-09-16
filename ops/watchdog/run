@@ -1,0 +1,110 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Watchdog for the services on the phone (a runit service in Termux; see "Watchdog" in README.md).
+#
+# runit already restarts a service whose process exits. This catches the ones that keep running but
+# stop working: tailscaled stuck "network is down" after a Wi-Fi drop (on 2026-09-14 the drive was
+# unreachable for a day that way), a cloudflared that lost its Cloudflare connections, or a frozen
+# Node process. Every INTERVAL seconds each service must answer; after FAIL_LIMIT failures in a row
+# it gets restarted (and killed if it won't stop). Services stopped on purpose (`sv down`) are left
+# alone, and so is anything started less than GRACE seconds ago.
+exec 2>&1
+PREFIX=/data/data/com.termux/files/usr
+TERMUX_HOME=/data/data/com.termux/files/home
+export PATH="$PREFIX/bin:$PATH"
+export SVDIR="${SVDIR:-$PREFIX/var/service}"
+INTERVAL="${INTERVAL:-60}"
+FAIL_LIMIT="${FAIL_LIMIT:-3}"
+GRACE="${GRACE:-300}"
+STATE="${STATE:-$PREFIX/var/run/watchdog}"
+# service=check: an http(s) URL must send any HTTP response; "cloudflared" and "tailscale" are below.
+CHECKS="${CHECKS:-cloud-drive=http://127.0.0.1:3000/api/health portfolio=http://127.0.0.1:8000/ cloudflared=cloudflared tailscaled=tailscale}"
+DRY_RUN="${DRY_RUN:-}" # set to report what it would restart without doing it
+ONCE="${ONCE:-}"       # set to run a single round of checks
+
+mkdir -p "$STATE"
+
+answers() { # URL: true if something sends an HTTP response within 10 s
+  [ "$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$1")" != 000 ]
+}
+
+online() { # the phone itself can reach the internet
+  [ "$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://www.google.com/generate_204)" = 204 ]
+}
+
+cloudflared_ok() { # its metrics server answers /ready with 200 while it has live Cloudflare connections
+  for port in 20241 20242 20243 20244 20245; do
+    [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' "http://127.0.0.1:$port/ready")" = 200 ] && return 0
+  done
+  return 1
+}
+
+tailscale_ok() { # the daemon answers, is running, and this node is online
+  timeout 20 tailscale --socket="$TERMUX_HOME/.tailscale/tailscaled.sock" status --json 2>/dev/null |
+    node -e '
+      let s = "";
+      process.stdin.on("data", (d) => (s += d)).on("end", () => {
+        try {
+          const j = JSON.parse(s);
+          const down = (j.Health || []).some((h) => /network is down/i.test(h));
+          process.exit(j.BackendState === "Running" && j.Self?.Online && !down ? 0 : 1);
+        } catch {
+          process.exit(1);
+        }
+      });'
+}
+
+healthy() { # name check
+  case "$2" in
+    http://* | https://*) answers "$2" ;;
+    # Restarting these can't fix a dead internet connection, so they only count as failing while it works.
+    cloudflared) cloudflared_ok || ! online ;;
+    tailscale) tailscale_ok || ! online ;;
+    *) echo "$1: unknown check '$2'"; return 0 ;;
+  esac
+}
+
+running_for() { # seconds the service has been up; empty if it's down or not installed
+  sv status "$1" 2>/dev/null | sed -n 's/^run: [^:]*: (pid [0-9]*) \([0-9]*\)s.*/\1/p'
+}
+
+restart() {
+  if [ -n "$DRY_RUN" ]; then
+    echo "$1: would restart now (dry run)"
+    return
+  fi
+  echo "$1: restarting"
+  sv -w 30 restart "$1" >/dev/null 2>&1 && return
+  echo "$1: did not stop within 30 s, killing it"
+  # cloud-drive runs Node inside proot and records Node's pid; kill that so proot exits too.
+  [ -f "$SVDIR/$1/node.pid" ] && kill -KILL "$(cat "$SVDIR/$1/node.pid")" 2>/dev/null
+  sv kill "$1" >/dev/null 2>&1
+}
+
+echo "watchdog started: every ${INTERVAL}s, restart after $FAIL_LIMIT failed checks: $CHECKS"
+while :; do
+  for entry in $CHECKS; do
+    name=${entry%%=*}
+    check=${entry#*=}
+    fails_file="$STATE/$name.fails"
+    fails=$(cat "$fails_file" 2>/dev/null || echo 0)
+    up=$(running_for "$name")
+    if [ -z "$up" ] || [ "$up" -lt "$GRACE" ]; then
+      echo 0 >"$fails_file" # down on purpose, or still starting up
+      continue
+    fi
+    if healthy "$name" "$check"; then
+      [ "$fails" -gt 0 ] && echo "$name: answering again"
+      echo 0 >"$fails_file"
+      continue
+    fi
+    fails=$((fails + 1))
+    echo "$name: check failed ($fails/$FAIL_LIMIT)"
+    if [ "$fails" -ge "$FAIL_LIMIT" ]; then
+      restart "$name"
+      fails=0
+    fi
+    echo "$fails" >"$fails_file"
+  done
+  [ -n "$ONCE" ] && exit 0
+  sleep "$INTERVAL"
+done
