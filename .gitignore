@@ -3,3 +3,5 @@ dist/
 .env
 e2e/screenshots/
 *.log
+.env.*
+!.env.example
