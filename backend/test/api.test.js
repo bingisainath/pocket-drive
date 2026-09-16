@@ -20,8 +20,14 @@ let tmp, config, ctx, server, base, cookie;
 
 before(async () => {
   tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'cloud-drive-test-'));
+  // Stand-in for libheif's heif-dec (`heif-dec --quality 95 <in> <out>`): copies a known JPEG, so
+  // the HEIC fallback is tested without needing an HEVC encoder to build a real iPhone photo.
+  const fakeHeifDec = path.join(tmp, 'fake-heif-dec');
+  await sharp({ create: { width: 900, height: 1200, channels: 3, background: '#c84' } }).jpeg().toFile(path.join(tmp, 'heif-fixture.jpg'));
+  fs.writeFileSync(fakeHeifDec, '#!/bin/sh\nexec cp "$(dirname "$0")/heif-fixture.jpg" "$4"\n', { mode: 0o755 });
   config = buildConfig({
     DATA_DIR: tmp,
+    HEIF_DECODER: fakeHeifDec,
     PASSWORD_HASH: hashPassword(PASSWORD, { N: 1024, r: 8, p: 1 }), // cheap cost for fast tests
     MAX_UPLOAD_MB: '1',
     LOGIN_MAX_ATTEMPTS: '3',
@@ -290,6 +296,18 @@ test('previews are screen-sized WebP images that never upscale', async () => {
   const txt = (await list('Photos')).find((e) => e.name === 'a.txt');
   assert.equal((await api('GET', `/api/files/${txt.id}/preview`)).status, 404);
   assert.equal((await api('GET', '/api/files/999999/preview')).status, 404);
+});
+
+test('HEIC photos sharp cannot decode go through the HEIF decoder', async () => {
+  const heic = (await (await upload('Photos', [['iphone.heic', 'HEVC bytes sharp cannot read', 'image/heic']])).json()).files[0];
+  let res = await api('GET', `/api/files/${heic.id}/preview`);
+  assert.equal(res.status, 200);
+  let meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepEqual([meta.format, meta.width, meta.height], ['webp', 900, 1200]);
+  res = await api('GET', `/api/files/${heic.id}/thumb`);
+  meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepEqual([meta.width, meta.height], [400, 400]);
+  assert.deepEqual(fs.readdirSync(config.thumbDir).filter((f) => f.endsWith('.tmp') || f.endsWith('.jpg')), []);
 });
 
 test('the viewer uses previews only for large or non-browser image formats', () => {

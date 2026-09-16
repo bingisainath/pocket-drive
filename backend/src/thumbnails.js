@@ -1,13 +1,21 @@
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import { promisify } from 'node:util';
 import { joinRel, resolveInside } from './paths.js';
+
+const execFileP = promisify(execFile);
 
 sharp.cache(false); // don't keep decoded images in memory between requests
 sharp.concurrency(1); // one libvips thread per image; we parallelize across images instead
 
 const MAX_PARALLEL = 2;
+const SHARP_OPTIONS = { failOn: 'none', limitInputPixels: 200_000_000 };
+// iPhone photos are HEVC-coded HEIC, which sharp's bundled libvips can't decode (it only handles
+// AVIF-coded HEIF), so those go through libheif's decoder first.
+const HEIF = new Set(['image/heic', 'image/heif']);
 const SUPPORTED = new Set([
   'image/jpeg',
   'image/png',
@@ -45,7 +53,7 @@ export const canPreview = (mime) => PREVIEWABLE.has(mime);
 export const wantsPreview = (row) =>
   canPreview(row.mime) && (row.size > PREVIEW_MIN_BYTES || NOT_BROWSER_SAFE.has(row.mime));
 
-export function createThumbnailer({ thumbDir, storageDir }) {
+export function createThumbnailer({ thumbDir, storageDir, heifDecoder = 'heif-dec' }) {
   const inflight = new Map(); // "variant:id" -> Promise<path|null>
   const failed = new Set(); // "variant:id" sharp couldn't decode (e.g. HEVC-encoded HEIC); don't retry until restart
   const waiting = [];
@@ -63,20 +71,35 @@ export function createThumbnailer({ thumbDir, storageDir }) {
   const whenIdle = () => (active === 0 ? Promise.resolve() : new Promise((resolve) => idleWaiters.push(resolve)));
   const exists = (file) => fsp.access(file).then(() => true, () => false);
 
+  /** The file sharp should read: the original, or for HEIC sharp can't decode, a temporary JPEG of it. */
+  async function decodable(row, src, tmp) {
+    if (!HEIF.has(row.mime)) return src;
+    const direct = await sharp(src, SHARP_OPTIONS)
+      .resize(16)
+      .toBuffer()
+      .then(() => true, () => false);
+    if (direct) return src;
+    const jpeg = `${tmp}.jpg`;
+    // heif-dec applies the image's rotation/mirroring itself, so the JPEG comes out upright.
+    await execFileP(heifDecoder, ['--quality', '95', src, jpeg], { timeout: 120_000 });
+    return jpeg;
+  }
+
   async function render(row, variant, key, out) {
     await acquire();
     const tmp = `${out}.${crypto.randomUUID()}.tmp`;
     try {
       const src = resolveInside(storageDir, joinRel(row.parent_path, row.name));
-      const img = sharp(src, { failOn: 'none', limitInputPixels: 200_000_000 }).rotate(); // honor EXIF orientation
+      const input = await decodable(row, src, tmp);
+      const img = sharp(input, SHARP_OPTIONS).rotate(); // honor EXIF orientation
       await VARIANTS[variant].render(img).toFile(tmp);
       await fsp.rename(tmp, out);
       return out;
     } catch {
       failed.add(key);
-      await fsp.rm(tmp, { force: true });
       return null;
     } finally {
+      await Promise.all([fsp.rm(tmp, { force: true }), fsp.rm(`${tmp}.jpg`, { force: true })]);
       release();
     }
   }
