@@ -124,6 +124,23 @@ export function authRoutes(ctx) {
     res.status(204).end();
   });
 
+  // Account deletion (a Google Play requirement). A member removes their own account; the owner
+  // account can't be deleted this way (it belongs to whoever runs the server).
+  router.delete('/account', (req, res) => {
+    const token = readSessionToken(req);
+    const session = token && sessions.validate(token);
+    if (!session) throw new HttpError(401, 'Not signed in');
+    if (session.user.is_owner === 1) throw new HttpError(403, 'The owner account can’t be deleted here');
+    const { id, email } = session.user;
+    users.remove(id); // FK cascades their shares, sessions and devices; their files' owner_id -> NULL (stay with the owner)
+    clearSessionCookie(req, res);
+    activity.log({ user: null, ip: req.ip }, 'delete_account', { email });
+    res.json({
+      deleted: true,
+      message: 'Your account, folder access, sign-ins and notification devices have been removed. Files you uploaded remain on the owner’s drive.',
+    });
+  });
+
   // Step 1: send the browser to Google. The state is also stored in a cookie so step 2 can check
   // that it's the same browser (prevents "login CSRF": signing someone into an attacker's account).
   router.get('/google/start', (req, res) => {

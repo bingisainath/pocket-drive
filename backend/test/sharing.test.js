@@ -324,6 +324,26 @@ test('removing a user deletes their device tokens (foreign-key cascade)', () => 
   assert.equal(ctx.devices.forUser(u.id).length, 0);
 });
 
+test('a member can delete their own account; files stay and the owner cannot', async () => {
+  const email = 'selfdelete@example.com';
+  const ownerClient = as((await googleSignIn(OWNER)).cookie);
+  const folder = await (await ownerClient.mkdir('', 'DelTest')).json();
+  assert.equal((await ownerClient.share('DelTest', email, 'contributor')).status, 201);
+  const member = as((await googleSignIn(email)).cookie);
+  const u = ctx.users.byEmail(email);
+  ctx.devices.register(u.id, 'fcm-selfdel', 'android');
+
+  const res = await member.call('DELETE', '/api/auth/account');
+  assert.equal(res.status, 200);
+  assert.match((await res.json()).message, /remain/i);
+  assert.equal(ctx.users.byEmail(email), undefined); // account gone
+  assert.equal(ctx.devices.forUser(u.id).length, 0); // devices cascaded
+  assert.equal((await member.json('/api/auth/me')).authenticated, false); // signed out everywhere
+
+  assert.equal((await ownerClient.call('DELETE', '/api/auth/account')).status, 403); // owner can't self-delete
+  await ownerClient.call('DELETE', `/api/entries/${folder.id}`); // clean up so later root-listing tests are unaffected
+});
+
 // ---------------------------------------------------------------- setting up shares
 
 test('the owner builds folders and shares them by email and role', async () => {
