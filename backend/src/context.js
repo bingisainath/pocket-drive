@@ -6,6 +6,7 @@ import { createLoginLimiter, createSessionStore, parsePasswordHash } from './aut
 import { RESUMABLE_DIR_NAME } from './config.js';
 import { createRepo, openDatabase } from './db.js';
 import { createDeviceStore } from './devices.js';
+import { createFcmSender } from './fcm.js';
 import { createGoogleAuth } from './google.js';
 import { createResumableUploads } from './resumable.js';
 import { createScanner } from './scanner.js';
@@ -37,6 +38,7 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
   sessions.resetIfPasswordChanged(config.passwordHash);
   sessions.prune();
   const devices = createDeviceStore(db);
+  const fcm = createFcmSender(config, { fetchImpl, log, devices });
   const thumbs = createThumbnailer(config);
   const streams = createStreamer({ ...config, log });
   const resumable = createResumableUploads({ dir: config.resumableDir, chunkBytes: config.uploadChunkBytes });
@@ -53,6 +55,7 @@ export async function createContext(config, { log = console, fetchImpl } = {}) {
     activity,
     sessions,
     devices,
+    fcm,
     thumbs,
     streams,
     resumable,
