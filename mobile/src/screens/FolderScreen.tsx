@@ -6,6 +6,7 @@ import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { EntryCell } from '../components/EntryCell';
 import { EntryRow } from '../components/EntryRow';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { AppText, EmptyState, IconButton, Sheet } from '../components/ui';
 import { useFolder } from '../hooks/useFolder';
 import { useSortOrder, useViewMode } from '../lib/prefs';
@@ -87,6 +88,7 @@ export function FolderScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.screen}>
+      <OfflineBanner />
       <Breadcrumbs path={path} isOwner={access?.isOwner ?? false} accessRoot={access?.accessRoot ?? null} onNavigate={goToCrumb} />
       <FlashList
         key={viewMode} // a numColumns change needs a fresh list instance

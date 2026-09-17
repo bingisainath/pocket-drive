@@ -1,10 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { onUnauthorized } from '../api/client';
+import { ApiError, onUnauthorized } from '../api/client';
 import { api } from '../api/drive';
 import { clearToken, currentToken, loadToken, saveToken } from '../lib/auth-token';
 import { queryClient } from '../lib/query';
-import { clearStorage } from '../lib/storage';
+import { clearStorage, storage, StorageKey } from '../lib/storage';
 import type { User } from '../shared/types';
+
+const saveLastUser = (user: User) => storage.set(StorageKey.lastUser, JSON.stringify(user));
+function loadLastUser(): User | null {
+  const raw = storage.getString(StorageKey.lastUser);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    return null;
+  }
+}
 
 export type AuthState =
   | { status: 'loading' }
@@ -36,14 +47,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!currentToken()) return setState({ status: 'signedOut' });
     try {
       const me = await api.me();
-      setState(me.authenticated && me.user ? { status: 'signedIn', user: me.user } : { status: 'signedOut' });
+      if (me.authenticated && me.user) {
+        saveLastUser(me.user);
+        setState({ status: 'signedIn', user: me.user });
+      } else {
+        setState({ status: 'signedOut' });
+      }
     } catch (err) {
-      setState({ status: 'signedOut', error: (err as Error).message });
+      // Offline with a valid token: trust the last known user instead of signing out. A real 401
+      // goes through onUnauthorized (which clears the token), not here.
+      const cached = loadLastUser();
+      if ((err as ApiError).status === 0 && cached) setState({ status: 'signedIn', user: cached });
+      else setState({ status: 'signedOut', error: (err as Error).message });
     }
   }, []);
 
   const finishSignIn = useCallback(async (result: { token: string; user: User }) => {
     await saveToken(result.token);
+    saveLastUser(result.user);
     setState({ status: 'signedIn', user: result.user });
   }, []);
 
