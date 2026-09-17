@@ -14,7 +14,7 @@ import {
 } from 'lucide-react-native';
 import { memo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { urls } from '../api/drive';
+import { authHeaders, urls } from '../api/drive';
 import { hasThumbnail, kindOf, type Kind } from '../shared/lib/entries';
 import { formatBytes, formatDate, plural } from '../shared/lib/format';
 import type { Entry } from '../shared/types';
@@ -45,8 +45,8 @@ function Leading({ entry }: { entry: Entry }) {
   return (
     <View style={[styles.icon, { borderRadius: radii.sm, backgroundColor: showThumb ? colors.surfaceAlt : `${color}22` }]}>
       {showThumb ? (
-        // Thumbnails go through the session cookie today; Phase 3 switches to FastImage with a Bearer header.
-        <Image source={{ uri: urls.thumb(entry) }} style={styles.thumb} onError={() => setFailed(true)} />
+        // The Bearer token authorises the thumbnail request. FastImage (with disk cache) comes in a later slice.
+        <Image source={{ uri: urls.thumb(entry), headers: authHeaders() }} style={styles.thumb} onError={() => setFailed(true)} />
       ) : (
         <Icon size={24} color={color} />
       )}

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config';
+import { authHeaders } from '../lib/auth-token';
 
 export class ApiError extends Error {
   status: number;
@@ -17,9 +18,9 @@ export function onUnauthorized(handler: () => void) {
 /**
  * A JSON request to the drive API.
  *
- * Signing in uses the same HttpOnly session cookie as the web app: React Native's networking layer
- * keeps cookies in the platform's cookie store, so once signed in, every request — and image loads
- * such as thumbnails — carries the session automatically.
+ * The app authenticates with a Bearer token (stored in the Keystore), not the web's cookie — background
+ * native uploads can't use the JS cookie jar. The token is attached to every request, and to image and
+ * video loads, via {@link authHeaders}.
  */
 export async function request<T>(
   method: string,
@@ -34,6 +35,7 @@ export async function request<T>(
       credentials: 'include',
       headers: {
         Accept: 'application/json',
+        ...authHeaders(),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),

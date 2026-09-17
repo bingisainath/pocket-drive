@@ -1,5 +1,6 @@
 import { ApiError, onUnauthorized, request } from '../src/api/client';
 import { API_BASE_URL } from '../src/config';
+import { clearToken, saveToken } from '../src/lib/auth-token';
 
 /** The ApiError a request rejected with (fails the test if it resolved). */
 const failure = (promise: Promise<unknown>) =>
@@ -23,6 +24,23 @@ describe('request', () => {
   beforeEach(() => {
     fetchMock = jest.fn();
     globalThis.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(async () => {
+    await clearToken(); // don't leak a Bearer token into other tests
+  });
+
+  test('attaches the Bearer token when signed in', async () => {
+    await saveToken('sess-abc');
+    fetchMock.mockReturnValue(respond(200, { ok: true }));
+    await request('GET', '/api/list');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sess-abc');
+  });
+
+  test('sends no Authorization header when signed out', async () => {
+    fetchMock.mockReturnValue(respond(200, {}));
+    await request('GET', '/api/list');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
   });
 
   test('calls the live drive with JSON and the session cookie', async () => {
