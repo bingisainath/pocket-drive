@@ -5,3 +5,23 @@ e2e/screenshots/
 *.log
 .env.*
 !.env.example
+
+# Secrets — never commit (owner passwords, OAuth, Firebase, signing keys)
+google-services.json
+**/google-services.json
+*-service-account*.json
+fcm-service-account*.json
+*.keystore
+!**/debug.keystore
+*.jks
+*.p8
+*.p12
+
+# Release build artifacts
+*.apk
+*.aab
+*.aab.idsig
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
