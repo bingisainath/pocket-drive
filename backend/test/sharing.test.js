@@ -316,6 +316,14 @@ test('token/google rejects a bad signature, wrong audience, unverified email, an
   assert.equal((await postJson('/api/auth/token/google', {})).status, 400);
 });
 
+test('removing a user deletes their device tokens (foreign-key cascade)', () => {
+  const u = ctx.users.invite('cascade@example.com');
+  ctx.devices.register(u.id, 'fcm-cascade', 'android');
+  assert.equal(ctx.devices.forUser(u.id).length, 1);
+  assert.equal(ctx.users.remove(u.id), true);
+  assert.equal(ctx.devices.forUser(u.id).length, 0);
+});
+
 // ---------------------------------------------------------------- setting up shares
 
 test('the owner builds folders and shares them by email and role', async () => {
@@ -560,13 +568,14 @@ test('an existing single-user database upgrades in place', async () => {
   old.close();
 
   const db = openDatabase(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 1);
+  assert.equal(db.pragma('user_version', { simple: true }), 2);
   assert.deepEqual(db.prepare('SELECT name, owner_id FROM entries ORDER BY id').all(), [
     { name: 'Photos', owner_id: null },
     { name: 'a.jpg', owner_id: null },
   ]);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0); // old sessions signed out
   assert.ok(db.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'user_id'").get());
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'devices'").get()); // migration 2
   db.close();
-  assert.equal(openDatabase(file).pragma('user_version', { simple: true }), 1); // re-opening is a no-op
+  assert.equal(openDatabase(file).pragma('user_version', { simple: true }), 2); // re-opening is a no-op
 });

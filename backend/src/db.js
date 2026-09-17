@@ -70,6 +70,17 @@ const MIGRATIONS = [
   );
   CREATE INDEX sessions_by_user ON sessions (user_id);
   `,
+  // 2: push notification device tokens (Firebase Cloud Messaging), one row per device.
+  `
+  CREATE TABLE devices (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token      TEXT    NOT NULL UNIQUE,          -- the FCM registration token
+    platform   TEXT    NOT NULL,                 -- 'android' | 'ios'
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX devices_by_user ON devices (user_id);
+  `,
 ];
 
 // Full relative path of the row aliased `e`.
