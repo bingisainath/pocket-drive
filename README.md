@@ -154,6 +154,12 @@ How access works:
 - **Activity log.** **⋮ → Activity** lists sign-ins (including refused ones), uploads, new folders,
   deletes and sharing changes, kept for `ACTIVITY_RETENTION_DAYS`.
 
+## Android app
+
+A React Native app for the drive lives in [`mobile/`](mobile/README.md). It's a standalone project
+with its own dependencies, built on a laptop with the Android SDK, and it talks to the drive over the
+public address. It doesn't change anything about installing or running the server on the phone.
+
 ## Configuration
 
 All settings live in `backend/.env`. `npm run hash-password` creates this file from
@@ -216,6 +222,7 @@ cloud-drive/
 │       ├── components/    # Drive, grid/list views, previewer, Share/People/Activity dialogs, upload panel
 │       ├── hooks/         # upload queue, long-press, URL-synced folder path, overlays
 │       └── api.ts         # typed API client (XHR for uploads, to get progress)
+├── mobile/                # React Native (CLI) Android app, standalone; see mobile/README.md
 ├── e2e/run.mjs            # headless-Chromium end-to-end test
 └── ops/watchdog/          # runit service that restarts hung services on the phone
 ```
