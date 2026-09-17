@@ -28,13 +28,44 @@ function decodeJwtPayload(jwt) {
 }
 
 export function createGoogleAuth(config, { fetchImpl = globalThis.fetch } = {}) {
-  const { clientId, clientSecret, authUrl, tokenUrl } = config.google;
+  const { clientId, clientSecret, authUrl, tokenUrl, jwksUrl } = config.google;
   const enabled = Boolean(clientId && clientSecret && config.ownerEmail && config.publicOrigins.length);
   const pending = new Map(); // state -> { nonce, verifier, redirectUri, returnTo, expires }
 
   function prune() {
     const now = Date.now();
     for (const [state, p] of pending) if (p.expires <= now) pending.delete(state);
+  }
+
+  // Cache of Google's ID-token signing keys (kid -> public KeyObject), refreshed when a key is
+  // missing or the cache has expired. Used only by the mobile app's native sign-in.
+  let jwks = { keys: new Map(), expires: 0 };
+  async function refreshJwks() {
+    let res;
+    try {
+      res = await fetchImpl(jwksUrl, { signal: AbortSignal.timeout(15_000) });
+    } catch (err) {
+      throw new SignInError(`could not reach Google's keys: ${err.message}`);
+    }
+    if (!res.ok) throw new SignInError(`could not fetch Google's keys (HTTP ${res.status})`);
+    const body = await res.json().catch(() => ({}));
+    const keys = new Map();
+    for (const jwk of body.keys ?? []) {
+      if (jwk.kid && jwk.kty === 'RSA') {
+        try {
+          keys.set(jwk.kid, crypto.createPublicKey({ key: jwk, format: 'jwk' }));
+        } catch {
+          /* skip a malformed key */
+        }
+      }
+    }
+    const maxAge = Number(/max-age=(\d+)/.exec(res.headers.get('cache-control') || '')?.[1]) || 3600;
+    jwks = { keys, expires: Date.now() + maxAge * 1000 };
+  }
+  async function signingKey(kid) {
+    if (!kid) return null;
+    if (jwks.expires <= Date.now() || !jwks.keys.has(kid)) await refreshJwks();
+    return jwks.keys.get(kid) ?? null;
   }
 
   return {
@@ -109,6 +140,51 @@ export function createGoogleAuth(config, { fetchImpl = globalThis.fetch } = {}) 
       if (claims.aud !== clientId) throw new SignInError('ID token is for a different app');
       if (typeof claims.exp !== 'number' || claims.exp * 1000 < Date.now() - 60_000) throw new SignInError('ID token expired');
       if (claims.nonce !== p.nonce) throw new SignInError('ID token nonce mismatch');
+      if (typeof claims.sub !== 'string' || typeof claims.email !== 'string') throw new SignInError('ID token lacks an email');
+      if (claims.email_verified !== true && claims.email_verified !== 'true') {
+        throw new SignInError('Google email not verified', 'unverified');
+      }
+      return {
+        sub: claims.sub,
+        email: claims.email.toLowerCase(),
+        name: typeof claims.name === 'string' ? claims.name.slice(0, 200) : null,
+        picture: GOOGLE_PICTURE.test(claims.picture ?? '') ? claims.picture : null,
+      };
+    },
+
+    /**
+     * Verify an ID token from the mobile app's native Google sign-in. Unlike the web flow (whose
+     * token came straight from Google over TLS), this token was handed to the app by the Google
+     * Sign-In SDK, so its RS256 signature MUST be checked against Google's JWKS, then its claims.
+     * Returns the same verified identity shape as {@link identify}.
+     */
+    async verifyIdToken(idToken) {
+      if (!clientId) throw new HttpError(404, 'Google sign-in is not set up');
+      const parts = String(idToken).split('.');
+      if (parts.length !== 3) throw new SignInError('malformed ID token');
+      const [headerB64, payloadB64, signatureB64] = parts;
+
+      let header;
+      try {
+        header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8'));
+      } catch {
+        throw new SignInError('malformed ID token');
+      }
+      if (header.alg !== 'RS256') throw new SignInError('unexpected ID token algorithm');
+
+      const key = await signingKey(header.kid);
+      if (!key) throw new SignInError('unknown ID token signing key');
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(`${headerB64}.${payloadB64}`);
+      verifier.end();
+      if (!verifier.verify(key, Buffer.from(signatureB64, 'base64url'))) {
+        throw new SignInError('ID token signature is invalid');
+      }
+
+      const claims = decodeJwtPayload(idToken);
+      if (!ISSUERS.has(claims.iss)) throw new SignInError('unexpected ID token issuer');
+      if (claims.aud !== clientId) throw new SignInError('ID token is for a different app');
+      if (typeof claims.exp !== 'number' || claims.exp * 1000 < Date.now() - 60_000) throw new SignInError('ID token expired');
       if (typeof claims.sub !== 'string' || typeof claims.email !== 'string') throw new SignInError('ID token lacks an email');
       if (claims.email_verified !== true && claims.email_verified !== 'true') {
         throw new SignInError('Google email not verified', 'unverified');
