@@ -1,9 +1,10 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-/** Native stack inside the Files tab: drill down through folders. */
+/** Native stack inside the Files tab: drill down through folders, plus search. */
 export type FilesStackParamList = {
   /** `path` is relative to the drive root ('' = My Drive, or "Shared with me" for members). */
   Folder: { path: string; title: string };
+  Search: undefined;
 };
 
 /** The bottom tabs. Admin is only registered for the owner. */
