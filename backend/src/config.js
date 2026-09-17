@@ -105,5 +105,11 @@ export function buildConfig(env = process.env) {
       jwksUrl: env.GOOGLE_JWKS_URL || 'https://www.googleapis.com/oauth2/v3/certs',
     },
     activityRetentionDays: number(env, 'ACTIVITY_RETENTION_DAYS', 180),
+    fcm: {
+      // Path to a Firebase service-account JSON, OUTSIDE the repo. Push is disabled cleanly if unset.
+      serviceAccountFile: (env.FCM_SERVICE_ACCOUNT_FILE || '').trim(),
+      // Base for the FCM HTTP v1 send endpoint; overridable so tests can point at a stand-in.
+      sendBaseUrl: env.FCM_SEND_BASE_URL || 'https://fcm.googleapis.com',
+    },
   };
 }
