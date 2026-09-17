@@ -1,26 +1,58 @@
+import {
+  ChevronRight,
+  File,
+  FileArchive,
+  FileCode,
+  FileSpreadsheet,
+  FileText,
+  Film,
+  Folder,
+  Image as ImageIcon,
+  Music,
+  Presentation,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { memo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { urls } from '../api/drive';
 import { hasThumbnail, kindOf, type Kind } from '../shared/lib/entries';
 import { formatBytes, formatDate, plural } from '../shared/lib/format';
 import type { Entry } from '../shared/types';
-import { useColors } from '../theme';
+import { useTheme } from '../theme';
+import { ListItem } from './ui';
 
-// Placeholder type badges until an icon set is chosen (e.g. react-native-vector-icons or lucide-react-native).
-const BADGE: Record<Kind, { label: string; color: string }> = {
-  folder: { label: '📁', color: '#f59e0b' },
-  image: { label: '🖼', color: '#10b981' },
-  video: { label: '🎬', color: '#8b5cf6' },
-  audio: { label: '🎵', color: '#ec4899' },
-  pdf: { label: 'PDF', color: '#ef4444' },
-  text: { label: 'TXT', color: '#64748b' },
-  code: { label: '</>', color: '#0ea5e9' },
-  archive: { label: 'ZIP', color: '#a16207' },
-  doc: { label: 'DOC', color: '#2563eb' },
-  sheet: { label: 'XLS', color: '#16a34a' },
-  slides: { label: 'PPT', color: '#ea580c' },
-  other: { label: 'FILE', color: '#64748b' },
+// Same icon set as the web app (lucide). Colours are the file-type accents from the web UI.
+const ICON: Record<Kind, { icon: LucideIcon; color: string }> = {
+  folder: { icon: Folder, color: '#f59e0b' },
+  image: { icon: ImageIcon, color: '#10b981' },
+  video: { icon: Film, color: '#8b5cf6' },
+  audio: { icon: Music, color: '#ec4899' },
+  pdf: { icon: FileText, color: '#ef4444' },
+  text: { icon: FileText, color: '#64748b' },
+  code: { icon: FileCode, color: '#0ea5e9' },
+  archive: { icon: FileArchive, color: '#a16207' },
+  doc: { icon: FileText, color: '#2563eb' },
+  sheet: { icon: FileSpreadsheet, color: '#16a34a' },
+  slides: { icon: Presentation, color: '#ea580c' },
+  other: { icon: File, color: '#64748b' },
 };
+
+function Leading({ entry }: { entry: Entry }) {
+  const { colors, radii } = useTheme();
+  const [failed, setFailed] = useState(false);
+  const { icon: Icon, color } = ICON[kindOf(entry)];
+  const showThumb = hasThumbnail(entry) && !failed;
+  return (
+    <View style={[styles.icon, { borderRadius: radii.sm, backgroundColor: showThumb ? colors.surfaceAlt : `${color}22` }]}>
+      {showThumb ? (
+        // Thumbnails go through the session cookie today; Phase 3 switches to FastImage with a Bearer header.
+        <Image source={{ uri: urls.thumb(entry) }} style={styles.thumb} onError={() => setFailed(true)} />
+      ) : (
+        <Icon size={24} color={color} />
+      )}
+    </View>
+  );
+}
 
 interface Props {
   entry: Entry;
@@ -28,10 +60,7 @@ interface Props {
 }
 
 function EntryRowBase({ entry, onPress }: Props) {
-  const colors = useColors();
-  const [thumbFailed, setThumbFailed] = useState(false);
-  const kind = kindOf(entry);
-  const badge = BADGE[kind];
+  const { colors } = useTheme();
   const detail = entry.isDir
     ? entry.childCount === null
       ? 'Folder'
@@ -39,40 +68,19 @@ function EntryRowBase({ entry, onPress }: Props) {
     : `${formatBytes(entry.size)} · ${formatDate(entry.createdAt)}`;
 
   return (
-    <Pressable
+    <ListItem
+      title={entry.name}
+      subtitle={detail}
+      leading={<Leading entry={entry} />}
+      trailing={entry.isDir ? <ChevronRight size={20} color={colors.muted} /> : undefined}
       onPress={() => onPress(entry)}
-      accessibilityRole="button"
-      accessibilityLabel={entry.name}
-      style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.border : colors.surface }]}
-    >
-      <View style={[styles.icon, { backgroundColor: `${badge.color}22` }]}>
-        {hasThumbnail(entry) && !thumbFailed ? (
-          // The session cookie from sign-in is sent with image requests too.
-          <Image source={{ uri: urls.thumb(entry) }} style={styles.thumb} onError={() => setThumbFailed(true)} />
-        ) : (
-          <Text style={[styles.badge, { color: badge.color }]}>{badge.label}</Text>
-        )}
-      </View>
-      <View style={styles.text}>
-        <Text numberOfLines={1} style={[styles.name, { color: colors.text }]}>
-          {entry.name}
-        </Text>
-        <Text numberOfLines={1} style={[styles.detail, { color: colors.muted }]}>
-          {detail}
-        </Text>
-      </View>
-    </Pressable>
+    />
   );
 }
 
 export const EntryRow = memo(EntryRowBase);
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
-  icon: { width: 48, height: 48, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 48, height: 48, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumb: { width: 48, height: 48 },
-  badge: { fontSize: 13, fontWeight: '700' },
-  text: { flex: 1, minWidth: 0 },
-  name: { fontSize: 15, fontWeight: '500' },
-  detail: { fontSize: 13, marginTop: 2 },
 });

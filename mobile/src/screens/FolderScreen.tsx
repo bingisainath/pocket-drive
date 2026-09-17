@@ -1,26 +1,22 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useLayoutEffect } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { useAuth } from '../auth/AuthContext';
+import { FlashList } from '@shopify/flash-list';
+import { FolderOpen } from 'lucide-react-native';
+import { useCallback } from 'react';
+import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 import { EntryRow } from '../components/EntryRow';
-import { StateView } from '../components/StateView';
+import { EmptyState } from '../components/ui';
 import { useFolder } from '../hooks/useFolder';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { FilesStackParamList } from '../navigation/types';
 import { formatBytes } from '../shared/lib/format';
 import type { Entry } from '../shared/types';
-import { useColors } from '../theme';
+import { useTheme } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Folder'>;
+type Props = NativeStackScreenProps<FilesStackParamList, 'Folder'>;
 
 export function FolderScreen({ navigation, route }: Props) {
   const { path } = route.params;
-  const colors = useColors();
+  const { colors } = useTheme();
   const { entries, loading, refreshing, error, refresh } = useFolder(path);
-
-  // Sign out lives on the top-level screen's header for now (a settings screen can take it over later).
-  useLayoutEffect(() => {
-    if (path === '') navigation.setOptions({ headerRight: SignOutButton });
-  }, [navigation, path]);
 
   const open = useCallback(
     (entry: Entry) => {
@@ -28,50 +24,37 @@ export function FolderScreen({ navigation, route }: Props) {
         navigation.push('Folder', { path: entry.path, title: entry.name });
         return;
       }
-      // TODO: file viewer (photo previews, HLS video, PDF, text) — see mobile/README.md → Next steps.
+      // TODO(Phase 3): file viewer (photo previews, HLS video, PDF, text).
       Alert.alert(entry.name, `${formatBytes(entry.size)}\n\nThe file viewer is the next thing to build.`);
     },
     [navigation],
   );
 
-  if (loading) return <StateView loading />;
+  if (loading) return <EmptyState loading />;
   if (error && entries.length === 0) {
-    return <StateView title="Couldn’t load this folder" message={error} actionLabel="Try again" onAction={refresh} />;
+    return <EmptyState title="Couldn’t load this folder" message={error} actionLabel="Try again" onAction={refresh} />;
   }
 
   return (
-    <FlatList
+    <FlashList
       data={entries}
       keyExtractor={(entry) => String(entry.id)}
       renderItem={({ item }) => <EntryRow entry={item} onPress={open} />}
       ItemSeparatorComponent={Separator}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} colors={[colors.primary]} />}
-      contentContainerStyle={entries.length === 0 ? styles.emptyContainer : undefined}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      contentContainerStyle={{ backgroundColor: colors.surface }}
       ListEmptyComponent={
-        <StateView title="Nothing here yet" message="Files you upload to this folder will show up here." />
+        <EmptyState icon={FolderOpen} title="Nothing here yet" message="Files you add to this folder will show up here." />
       }
-      style={{ backgroundColor: colors.surface }}
     />
   );
 }
 
-function SignOutButton() {
-  const colors = useColors();
-  const { signOut } = useAuth();
-  return (
-    <Pressable onPress={signOut} accessibilityRole="button" hitSlop={8}>
-      <Text style={[styles.headerButton, { color: colors.primary }]}>Sign out</Text>
-    </Pressable>
-  );
-}
-
 function Separator() {
-  const colors = useColors();
+  const { colors } = useTheme();
   return <View style={[styles.separator, { backgroundColor: colors.border }]} />;
 }
 
 const styles = StyleSheet.create({
-  headerButton: { fontSize: 16, fontWeight: '500' },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 76 },
-  emptyContainer: { flexGrow: 1 },
 });

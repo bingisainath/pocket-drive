@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthContext';
-import { useColors } from '../theme';
+import { AppText, Button, TextField } from '../components/ui';
+import { useTheme } from '../theme';
 
 export function LoginScreen() {
-  const colors = useColors();
+  const { colors, space } = useTheme();
   const { state, signIn } = useAuth();
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,44 +27,33 @@ export function LoginScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-        <Text style={[styles.title, { color: colors.text }]}>Pocket Drive</Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>Sign in to your drive</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { padding: space[6] }]}>
+        <AppText variant="display" style={styles.centered}>
+          Pocket Drive
+        </AppText>
+        <AppText variant="body" tone="muted" style={styles.centered}>
+          Sign in to your drive
+        </AppText>
 
-        <View style={styles.form}>
-          <TextInput
+        <View style={[styles.form, { marginTop: space[8], gap: space[3] }]}>
+          <TextField
             value={password}
             onChangeText={setPassword}
             onSubmitEditing={submit}
             placeholder="Owner password"
-            placeholderTextColor={colors.muted}
             secureTextEntry
             autoCapitalize="none"
             autoComplete="password"
             returnKeyType="go"
-            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+            error={shownError ?? undefined}
           />
-          {shownError && <Text style={[styles.error, { color: colors.danger }]}>{shownError}</Text>}
-          <Pressable
-            onPress={submit}
-            disabled={!password || busy}
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: colors.primary, opacity: !password || busy ? 0.5 : pressed ? 0.8 : 1 },
-            ]}
-          >
-            {busy ? (
-              <ActivityIndicator color={colors.primaryText} />
-            ) : (
-              <Text style={[styles.buttonText, { color: colors.primaryText }]}>Sign in</Text>
-            )}
-          </Pressable>
+          <Button label="Sign in" onPress={submit} loading={busy} disabled={!password} />
         </View>
 
-        {/* TODO: "Continue with Google" needs native Google Sign-In plus a backend endpoint that
-            verifies the Google ID token and issues a session (see mobile/README.md → Next steps). */}
-        <Text style={[styles.note, { color: colors.muted }]}>Google sign-in is coming to the app soon.</Text>
+        {/* TODO(Phase 3): "Continue with Google" — native Google Sign-In + backend token endpoint. */}
+        <AppText variant="caption" tone="muted" style={[styles.centered, { marginTop: space[6] }]}>
+          Google sign-in is coming to the app soon.
+        </AppText>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -71,13 +61,7 @@ export function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  title: { fontSize: 32, fontWeight: '700', textAlign: 'center' },
-  subtitle: { fontSize: 15, textAlign: 'center', marginTop: 6 },
-  form: { marginTop: 32, gap: 12 },
-  input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, fontSize: 16 },
-  error: { fontSize: 14 },
-  button: { height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  buttonText: { fontSize: 16, fontWeight: '600' },
-  note: { fontSize: 13, textAlign: 'center', marginTop: 24 },
+  container: { flex: 1, justifyContent: 'center' },
+  centered: { textAlign: 'center' },
+  form: {},
 });
