@@ -137,6 +137,18 @@ test('device registration validates input and needs a session', async () => {
   assert.equal((await api('POST', '/api/devices', { json: { token: 'x', platform: 'android' }, auth: false })).status, 401);
 });
 
+// --- account deletion ---
+
+test('account deletion refuses the owner and needs a session; the public page is served', async () => {
+  assert.equal((await api('DELETE', '/api/auth/account', { auth: false })).status, 401);
+  assert.equal((await api('DELETE', '/api/auth/account')).status, 403); // owner can't self-delete
+
+  const page = await api('GET', '/delete-account', { auth: false });
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html/);
+  assert.match(await page.text(), /Delete your Pocket Drive account/);
+});
+
 // --- folders ---
 
 test('create folders, list them, and reject duplicates', async () => {

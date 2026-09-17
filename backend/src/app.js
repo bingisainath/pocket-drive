@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { requireAuth } from './auth.js';
+import { accountDeletionPageHtml } from './deletion-page.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { deviceRoutes } from './routes/devices.js';
@@ -64,6 +65,12 @@ export function createApp(ctx) {
   app.use('/api/admin', requireAuth(ctx), adminRoutes(ctx));
   app.use('/api', requireAuth(ctx), deviceRoutes(ctx), fileRoutes(ctx));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+  // Public account-deletion instructions, linked from the Google Play Console.
+  app.get('/delete-account', (req, res) => {
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.type('html').send(accountDeletionPageHtml({ ownerEmail: config.ownerEmail }));
+  });
 
   // --- Built frontend (single-page app) ---
   const indexHtml = path.join(config.frontendDist, 'index.html');
