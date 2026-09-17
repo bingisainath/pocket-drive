@@ -1,0 +1,18 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Auto-deploy (a runit service in Termux; see "Auto-deploy" in README.md).
+#
+# Every POLL seconds it asks GitHub whether main has moved and, if that commit's CI passed, hands
+# over to ops/deploy/deploy.sh inside Debian, which tests, builds, restarts and rolls back if
+# needed. The script is copied to /tmp first, because the repo it lives in is about to change.
+exec 2>&1
+PREFIX=/data/data/com.termux/files/usr
+export PATH="$PREFIX/bin:$PATH"
+POLL="${POLL:-120}"
+REPO_SCRIPT="${REPO_SCRIPT:-/root/cloud-drive/ops/deploy/deploy.sh}"
+
+echo "auto-deploy started: checking origin/main every ${POLL}s"
+while :; do
+  proot-distro login debian -- /bin/bash -c "cp '$REPO_SCRIPT' /tmp/pocket-deploy.sh && bash /tmp/pocket-deploy.sh" ||
+    echo "deploy check failed (exit $?)"
+  sleep "$POLL"
+done

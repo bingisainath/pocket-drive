@@ -83,6 +83,41 @@ tail -f $PREFIX/var/log/sv/watchdog/current
 `INTERVAL`, `FAIL_LIMIT`, `GRACE` and `CHECKS` can be set at the top of the `run` script's environment;
 `DRY_RUN=1 ONCE=1 GRACE=0 ops/watchdog/run` checks everything once without restarting anything.
 
+### Auto-deploy
+
+Pushes to `main` reach the phone on their own. Two halves:
+
+- **CI on GitHub** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): every push and pull
+  request runs the backend tests and builds the web app, both on Node 20 like the phone. Heavy work
+  stays off the phone, which is the production server.
+- **Pull-based deploy on the phone** ([`ops/deploy/`](ops/deploy/deploy.sh)): a runit service checks
+  `origin/main` every 2 minutes. Nothing is exposed for this — the phone only makes outbound
+  requests. For each new commit it:
+  1. skips out if the working tree has uncommitted changes, or if a deploy is already running;
+  2. asks GitHub whether that commit's checks passed (waits while they run, refuses a red commit);
+  3. fast-forwards **without** rebuilding or restarting when only `mobile/`, `docs/` or `.github/` changed;
+  4. otherwise: snapshots the SQLite database (keeping the last 3), installs dependencies if a lock
+     file changed, runs the backend tests, builds the web app, and boots the new code on port 3199
+     with a throwaway data directory as a smoke test;
+  5. restarts the drive and waits for `/api/health`;
+  6. on any failure: **rolls back** to the previous commit, rebuilds, restarts, and **pauses
+     auto-deploy** until you remove the paused file.
+
+Install it from Termux, once `main` contains it:
+
+```bash
+cp -r $PREFIX/var/lib/proot-distro/containers/debian/rootfs/root/cloud-drive/ops/deploy $PREFIX/var/service/
+sv status deploy
+tail -f $PREFIX/var/log/sv/deploy/current
+```
+
+State lives in `/root/cloud-drive-deploy/` (inside Debian): `paused` (why it stopped, delete to
+resume), `history.log`, `db/` snapshots, and the last `tests.log`, `build.log` and `smoke.log`.
+Pause it yourself with `touch /root/cloud-drive-deploy/paused`, or stop the service with
+`sv down deploy`. To deploy by hand, or to try a fix: `bash /root/cloud-drive/ops/deploy/deploy.sh`.
+`REPO`, `BRANCH`, `SERVICE`, `HEALTH_URL`, `REQUIRE_CI`, `DEPLOY_PATHS` and the rest are
+environment variables, which is also how the script is tested in a sandbox.
+
 ### Monitoring
 
 Point a free uptime monitor such as [UptimeRobot](https://uptimerobot.com) at
@@ -217,7 +252,8 @@ cloud-drive/
 │       ├── hooks/         # upload queue, long-press, URL-synced folder path, overlays
 │       └── api.ts         # typed API client (XHR for uploads, to get progress)
 ├── e2e/run.mjs            # headless-Chromium end-to-end test
-└── ops/watchdog/          # runit service that restarts hung services on the phone
+├── ops/watchdog/          # runit service that restarts hung services on the phone
+└── ops/deploy/            # runit service that deploys pushes to main (CI-gated, with rollback)
 ```
 
 - **Your files are real files.** A folder in the app is a real folder under `STORAGE_DIR`, and each file
