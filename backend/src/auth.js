@@ -143,6 +143,18 @@ export function readCookie(req, name) {
   return null;
 }
 
+/** The token from an `Authorization: Bearer <token>` header, or null. Used by the mobile app. */
+export function readBearer(req) {
+  const header = req.headers.authorization || '';
+  const match = /^Bearer +(.+)$/.exec(header);
+  return match ? match[1].trim() : null;
+}
+
+/** The session token a request presents, preferring the app's Bearer header over the web cookie. */
+export function readSessionToken(req) {
+  return readBearer(req) || readCookie(req, SESSION_COOKIE);
+}
+
 const cookieOptions = (req) => ({ httpOnly: true, sameSite: 'lax', secure: req.secure, path: '/' });
 
 export function setSessionCookie(req, res, token, ttlMs) {
@@ -153,14 +165,17 @@ export function clearSessionCookie(req, res) {
   res.clearCookie(SESSION_COOKIE, cookieOptions(req));
 }
 
-/** Rejects requests without a valid session; otherwise sets `req.user`. */
+/** Rejects requests without a valid session; otherwise sets `req.user`. Accepts a cookie or a Bearer token. */
 export function requireAuth(ctx) {
   return (req, res, next) => {
-    const token = readCookie(req, SESSION_COOKIE);
+    const bearer = readBearer(req);
+    const token = bearer || readCookie(req, SESSION_COOKIE);
     const session = token && ctx.sessions.validate(token);
     if (!session) return next(new HttpError(401, 'Not signed in'));
-    if (session.renewed) setSessionCookie(req, res, token, ctx.config.sessionTtlMs);
+    // Only the cookie needs refreshing on renewal; a Bearer token slides forward server-side.
+    if (session.renewed && !bearer) setSessionCookie(req, res, token, ctx.config.sessionTtlMs);
     req.user = session.user;
+    req.sessionToken = token;
     next();
   };
 }

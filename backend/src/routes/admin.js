@@ -7,7 +7,7 @@ import { normalizeEmail } from '../users.js';
 
 /** Owner-only: sharing folders, managing people, and the activity log. */
 export function adminRoutes(ctx) {
-  const { repo, users, shares, activity } = ctx;
+  const { repo, users, shares, activity, notifier } = ctx;
   const router = Router();
   router.use(requireOwner);
   const actor = (req) => ({ user: req.user, ip: req.ip });
@@ -33,6 +33,7 @@ export function adminRoutes(ctx) {
     if (email === users.owner().email) throw new HttpError(400, 'That’s you — as the owner you already have full access');
     const share = shares.upsert(folder, users.invite(email).id, role);
     activity.log(actor(req), 'share', { path: folder, detail: { email, role } });
+    notifier.shareCreated({ share, actorId: req.user.id });
     res.status(201).json(share);
   });
 

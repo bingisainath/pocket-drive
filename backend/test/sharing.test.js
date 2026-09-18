@@ -25,9 +25,36 @@ const CLIENT_ID = 'test-client.apps.googleusercontent.com';
 const CLIENT_SECRET = 'test-secret';
 const silent = { warn() {}, log() {}, error() {} };
 
-// --- Stand-in for Google's token endpoint ---
+// A real RSA key so the mobile app's ID tokens can be signed here and verified for real against
+// the stand-in JWKS below (the web flow uses an unsigned token because it trusts Google's TLS).
+const KID = 'test-key-1';
+const idKeys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+const publicJwk = { ...idKeys.publicKey.export({ format: 'jwk' }), kid: KID, alg: 'RS256', use: 'sig' };
+
+/** Build a signed Google ID token for the native-app sign-in tests. `claims` overrides the defaults. */
+function makeIdToken(claims = {}, { key = idKeys.privateKey, kid = KID } = {}) {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const header = b64({ alg: 'RS256', kid, typ: 'JWT' });
+  const payload = b64({
+    iss: 'https://accounts.google.com',
+    aud: CLIENT_ID,
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    email_verified: true,
+    ...claims,
+  });
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(`${header}.${payload}`);
+  signer.end();
+  return `${header}.${payload}.${signer.sign(key).toString('base64url')}`;
+}
+
+// --- Stand-in for Google's token endpoint (and, for the app flow, its JWKS) ---
 const grants = new Map(); // one-time code -> what Google would know about the sign-in
 const fakeGoogle = http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url.startsWith('/certs')) {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'max-age=3600' });
+    return res.end(JSON.stringify({ keys: [publicJwk] }));
+  }
   let body = '';
   for await (const chunk of req) body += chunk;
   const form = new URLSearchParams(body);
@@ -87,6 +114,7 @@ before(async () => {
     GOOGLE_CLIENT_ID: CLIENT_ID,
     GOOGLE_CLIENT_SECRET: CLIENT_SECRET,
     GOOGLE_TOKEN_URL: `http://127.0.0.1:${fakeGoogle.address().port}/token`,
+    GOOGLE_JWKS_URL: `http://127.0.0.1:${fakeGoogle.address().port}/certs`,
   });
   ctx = await createContext(config, { log: silent });
   server = createApp(ctx).listen(port, '127.0.0.1');
@@ -224,6 +252,96 @@ test('the owner’s password still works as a backup sign-in', async () => {
   assert.equal(res.status, 204);
   const me = await as(res.headers.get('set-cookie').split(';')[0]).json('/api/auth/me');
   assert.equal(me.user.isOwner, true);
+});
+
+// ---------------------------------------------------------------- app Bearer tokens
+
+const postJson = (url, json, headers = {}) =>
+  fetch(base + url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(json) });
+const withBearer = (token, method, url) => fetch(base + url, { method, headers: { authorization: `Bearer ${token}` } });
+
+test('token/password issues a Bearer token that authorizes API calls', async () => {
+  const res = await postJson('/api/auth/token/password', { password: PASSWORD });
+  assert.equal(res.status, 200);
+  const { token, user } = await res.json();
+  assert.equal(typeof token, 'string');
+  assert.equal(user.isOwner, true);
+  assert.equal(user.email, OWNER);
+
+  const me = await (await withBearer(token, 'GET', '/api/auth/me')).json();
+  assert.equal(me.authenticated, true);
+  assert.equal(me.user.email, OWNER);
+  assert.equal((await withBearer(token, 'GET', '/api/list?path=')).status, 200);
+});
+
+test('token/password rejects a wrong password', async () => {
+  assert.equal((await postJson('/api/auth/token/password', { password: 'nope' })).status, 401);
+});
+
+test('logout revokes a Bearer token', async () => {
+  const { token } = await (await postJson('/api/auth/token/password', { password: PASSWORD })).json();
+  const before = await (await withBearer(token, 'GET', '/api/auth/me')).json();
+  assert.equal(before.authenticated, true);
+  assert.equal((await withBearer(token, 'POST', '/api/auth/logout')).status, 204);
+  const me = await (await withBearer(token, 'GET', '/api/auth/me')).json();
+  assert.equal(me.authenticated, false);
+  assert.equal((await withBearer(token, 'GET', '/api/list?path=')).status, 401);
+});
+
+test('token/google verifies a signed ID token and issues a Bearer token', async () => {
+  // Same Google sub the earlier web sign-in pinned to the owner, or the account-mismatch guard trips.
+  const idToken = makeIdToken({ sub: `google-${OWNER}`, email: OWNER, name: 'Owner' });
+  const res = await postJson('/api/auth/token/google', { idToken });
+  assert.equal(res.status, 200);
+  const { token, user } = await res.json();
+  assert.equal(user.isOwner, true);
+  assert.equal(user.email, OWNER);
+  const me = await (await withBearer(token, 'GET', '/api/auth/me')).json();
+  assert.equal(me.user.email, OWNER);
+});
+
+test('token/google rejects a bad signature, wrong audience, unverified email, and uninvited user', async () => {
+  const valid = makeIdToken({ sub: 'google-owner', email: OWNER });
+  const tampered = `${valid.slice(0, -4)}AAAA`;
+  assert.equal((await postJson('/api/auth/token/google', { idToken: tampered })).status, 401);
+  assert.equal((await postJson('/api/auth/token/google', { idToken: makeIdToken({ email: OWNER, aud: 'other-app' }) })).status, 401);
+  assert.equal(
+    (await postJson('/api/auth/token/google', { idToken: makeIdToken({ email: OWNER, email_verified: false }) })).status,
+    401,
+  );
+  assert.equal(
+    (await postJson('/api/auth/token/google', { idToken: makeIdToken({ sub: 'g-x', email: 'stranger@example.com' }) })).status,
+    403,
+  );
+  assert.equal((await postJson('/api/auth/token/google', {})).status, 400);
+});
+
+test('removing a user deletes their device tokens (foreign-key cascade)', () => {
+  const u = ctx.users.invite('cascade@example.com');
+  ctx.devices.register(u.id, 'fcm-cascade', 'android');
+  assert.equal(ctx.devices.forUser(u.id).length, 1);
+  assert.equal(ctx.users.remove(u.id), true);
+  assert.equal(ctx.devices.forUser(u.id).length, 0);
+});
+
+test('a member can delete their own account; files stay and the owner cannot', async () => {
+  const email = 'selfdelete@example.com';
+  const ownerClient = as((await googleSignIn(OWNER)).cookie);
+  const folder = await (await ownerClient.mkdir('', 'DelTest')).json();
+  assert.equal((await ownerClient.share('DelTest', email, 'contributor')).status, 201);
+  const member = as((await googleSignIn(email)).cookie);
+  const u = ctx.users.byEmail(email);
+  ctx.devices.register(u.id, 'fcm-selfdel', 'android');
+
+  const res = await member.call('DELETE', '/api/auth/account');
+  assert.equal(res.status, 200);
+  assert.match((await res.json()).message, /remain/i);
+  assert.equal(ctx.users.byEmail(email), undefined); // account gone
+  assert.equal(ctx.devices.forUser(u.id).length, 0); // devices cascaded
+  assert.equal((await member.json('/api/auth/me')).authenticated, false); // signed out everywhere
+
+  assert.equal((await ownerClient.call('DELETE', '/api/auth/account')).status, 403); // owner can't self-delete
+  await ownerClient.call('DELETE', `/api/entries/${folder.id}`); // clean up so later root-listing tests are unaffected
 });
 
 // ---------------------------------------------------------------- setting up shares
@@ -470,13 +588,14 @@ test('an existing single-user database upgrades in place', async () => {
   old.close();
 
   const db = openDatabase(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 1);
+  assert.equal(db.pragma('user_version', { simple: true }), 2);
   assert.deepEqual(db.prepare('SELECT name, owner_id FROM entries ORDER BY id').all(), [
     { name: 'Photos', owner_id: null },
     { name: 'a.jpg', owner_id: null },
   ]);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0); // old sessions signed out
   assert.ok(db.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'user_id'").get());
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'devices'").get()); // migration 2
   db.close();
-  assert.equal(openDatabase(file).pragma('user_version', { simple: true }), 1); // re-opening is a no-op
+  assert.equal(openDatabase(file).pragma('user_version', { simple: true }), 2); // re-opening is a no-op
 });

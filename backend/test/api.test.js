@@ -116,6 +116,39 @@ test('correct password sets an HttpOnly session cookie', async () => {
   assert.equal(me.user.isOwner, true); // the password is the owner's backup sign-in
 });
 
+// --- push device tokens ---
+
+test('registering a device is idempotent per token, and can be removed', async () => {
+  const ownerId = ctx.users.owner().id;
+  assert.equal((await api('POST', '/api/devices', { json: { token: 'fcm-tok-1', platform: 'android' } })).status, 204);
+  assert.deepEqual(ctx.devices.forUser(ownerId), ['fcm-tok-1']);
+
+  // Re-registering the same token updates in place rather than adding a row.
+  assert.equal((await api('POST', '/api/devices', { json: { token: 'fcm-tok-1', platform: 'android' } })).status, 204);
+  assert.equal(ctx.devices.forUser(ownerId).length, 1);
+
+  assert.equal((await api('DELETE', '/api/devices', { json: { token: 'fcm-tok-1' } })).status, 204);
+  assert.equal(ctx.devices.forUser(ownerId).length, 0);
+});
+
+test('device registration validates input and needs a session', async () => {
+  assert.equal((await api('POST', '/api/devices', { json: { platform: 'android' } })).status, 400); // no token
+  assert.equal((await api('POST', '/api/devices', { json: { token: 'x', platform: 'windows' } })).status, 400); // bad platform
+  assert.equal((await api('POST', '/api/devices', { json: { token: 'x', platform: 'android' }, auth: false })).status, 401);
+});
+
+// --- account deletion ---
+
+test('account deletion refuses the owner and needs a session; the public page is served', async () => {
+  assert.equal((await api('DELETE', '/api/auth/account', { auth: false })).status, 401);
+  assert.equal((await api('DELETE', '/api/auth/account')).status, 403); // owner can't self-delete
+
+  const page = await api('GET', '/delete-account', { auth: false });
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html/);
+  assert.match(await page.text(), /Delete your Pocket Drive account/);
+});
+
 // --- folders ---
 
 test('create folders, list them, and reject duplicates', async () => {

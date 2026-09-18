@@ -40,6 +40,10 @@ export function createShareStore(db) {
     remove: db.prepare('DELETE FROM shares WHERE id = ?'),
     removeUnder: db.prepare('DELETE FROM shares WHERE folder_path = @full OR substr(folder_path, 1, length(@prefix)) = @prefix'),
     counts: db.prepare('SELECT folder_path, COUNT(*) AS n FROM shares GROUP BY folder_path'),
+    // Everyone whose share covers this folder: the exact folder or any ancestor of it.
+    accessIds: db.prepare(`
+      SELECT DISTINCT user_id FROM shares
+      WHERE folder_path = @path OR substr(@path, 1, length(folder_path) + 1) = folder_path || '/'`),
     pruneOrphans: db.prepare(`
       DELETE FROM shares WHERE folder_path NOT IN (
         SELECT CASE WHEN parent_path = '' THEN name ELSE parent_path || '/' || name END FROM entries WHERE is_dir = 1)`),
@@ -60,6 +64,8 @@ export function createShareStore(db) {
     removeUnder: (full) => q.removeUnder.run({ full, prefix: `${full}/` }),
     /** How many people each shared folder is shared with (for the owner's folder badges). */
     countsByFolder: () => new Map(q.counts.all().map((r) => [r.folder_path, r.n])),
+    /** User ids who can view a folder (a covering share on it or an ancestor). Excludes the owner. */
+    viewerIdsFor: (path) => q.accessIds.all({ path }).map((r) => r.user_id),
     /** Drop shares whose folder no longer exists (e.g. removed outside the app). */
     pruneOrphans: () => q.pruneOrphans.run().changes,
   };

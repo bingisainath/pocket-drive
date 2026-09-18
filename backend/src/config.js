@@ -100,7 +100,16 @@ export function buildConfig(env = process.env) {
       clientSecret: (env.GOOGLE_CLIENT_SECRET || '').trim(),
       authUrl: env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
+      // Public keys for verifying ID tokens from the mobile app's native Google sign-in.
+      // Configurable so tests can point at a stand-in JWKS (like GOOGLE_TOKEN_URL).
+      jwksUrl: env.GOOGLE_JWKS_URL || 'https://www.googleapis.com/oauth2/v3/certs',
     },
     activityRetentionDays: number(env, 'ACTIVITY_RETENTION_DAYS', 180),
+    fcm: {
+      // Path to a Firebase service-account JSON, OUTSIDE the repo. Push is disabled cleanly if unset.
+      serviceAccountFile: (env.FCM_SERVICE_ACCOUNT_FILE || '').trim(),
+      // Base for the FCM HTTP v1 send endpoint; overridable so tests can point at a stand-in.
+      sendBaseUrl: env.FCM_SEND_BASE_URL || 'https://fcm.googleapis.com',
+    },
   };
 }

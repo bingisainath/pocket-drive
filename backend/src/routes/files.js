@@ -33,7 +33,7 @@ async function diskUsage(dir) {
 // Every route here checks the signed-in user's access. Anything a user may not see answers
 // 404, exactly like something that doesn't exist, so private folders can't even be detected.
 export function fileRoutes(ctx) {
-  const { config, repo, thumbs, streams, scanner, shares, activity, resumable } = ctx;
+  const { config, repo, thumbs, streams, scanner, shares, activity, resumable, notifier } = ctx;
   const router = Router();
 
   router.use((req, res, next) => {
@@ -194,6 +194,7 @@ export function fileRoutes(ctx) {
     const results = await receiveUpload(req, ctx, parentPath, parentAbs, req.user.id);
     const saved = results.filter((r) => r.ok).map((r) => r.row);
     for (const row of saved) activity.log(actor(req), 'upload', { path: fullPathOf(row), detail: { size: row.size } });
+    if (saved.length) notifier.filesAdded({ folderPath: parentPath, actorId: req.user.id });
     const failures = results.filter((r) => !r.ok);
     if (!saved.length && failures.length) throw failures[0].err;
     if (!saved.length) throw new HttpError(400, 'No files in upload');
@@ -250,6 +251,7 @@ export function fileRoutes(ctx) {
     const row = await commitFile(ctx, resumable.partPath(upload), upload.parentPath, parentAbs, upload.name, req.user.id);
     await resumable.discard(upload);
     activity.log(actor(req), 'upload', { path: fullPathOf(row), detail: { size: row.size } });
+    notifier.filesAdded({ folderPath: upload.parentPath, actorId: req.user.id });
     res.status(201).json({ offset, file: dto(req, { ...row, uploaded_by: req.user.email }) });
   });
 
