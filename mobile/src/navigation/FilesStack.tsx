@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { FolderScreen } from '../screens/FolderScreen';
 import { SearchScreen } from '../screens/SearchScreen';
+import { ViewerScreen } from '../screens/ViewerScreen';
 import { useTheme } from '../theme';
 import type { FilesStackParamList } from './types';
 
@@ -28,6 +29,7 @@ export function FilesStack() {
         options={({ route }) => ({ title: route.params.title })}
       />
       <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
+      <Stack.Screen name="Viewer" component={ViewerScreen} />
     </Stack.Navigator>
   );
 }

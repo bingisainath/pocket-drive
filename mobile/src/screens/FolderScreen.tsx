@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
 import { ArrowUpDown, Check, FolderOpen, LayoutGrid, List, Search } from 'lucide-react-native';
 import { useCallback, useLayoutEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { EntryCell } from '../components/EntryCell';
 import { EntryRow } from '../components/EntryRow';
@@ -12,7 +12,6 @@ import { useFolder } from '../hooks/useFolder';
 import { useSortOrder, useViewMode } from '../lib/prefs';
 import type { FilesStackParamList } from '../navigation/types';
 import { SORT_LABELS, SORTS } from '../shared/lib/entries';
-import { formatBytes } from '../shared/lib/format';
 import type { Entry } from '../shared/types';
 import { useTheme } from '../theme';
 
@@ -32,12 +31,8 @@ export function FolderScreen({ navigation, route }: Props) {
 
   const open = useCallback(
     (entry: Entry) => {
-      if (entry.isDir) {
-        navigation.push('Folder', { path: entry.path, title: entry.name });
-        return;
-      }
-      // TODO(viewer slice): photo/video/PDF/text viewer.
-      Alert.alert(entry.name, `${formatBytes(entry.size)}\n\nThe file viewer is the next thing to build.`);
+      if (entry.isDir) navigation.push('Folder', { path: entry.path, title: entry.name });
+      else navigation.push('Viewer', { entry });
     },
     [navigation],
   );
