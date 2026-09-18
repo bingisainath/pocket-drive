@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, RotateCw, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KIND_ICON } from '../components/FileThumb';
 import { AppText, IconButton } from '../components/ui';
@@ -70,11 +70,11 @@ export function UploadPanel() {
         )}
 
         {expanded && (
-          <View style={[styles.list, { borderTopColor: colors.border }]}>
+          <ScrollView style={[styles.list, { borderTopColor: colors.border }]} nestedScrollEnabled keyboardShouldPersistTaps="handled">
             {tasks.map((t) => (
               <Row key={t.id} task={t} />
             ))}
-          </View>
+          </ScrollView>
         )}
       </View>
     </View>
