@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
-import { ArrowUpDown, Check, FolderOpen, FolderPlus, LayoutGrid, List, Search, Trash2 } from 'lucide-react-native';
+import { ArrowUpDown, Check, FolderOpen, FolderPlus, LayoutGrid, List, Search, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
@@ -175,6 +175,20 @@ export function FolderScreen({ navigation, route }: Props) {
       </Sheet>
 
       <Sheet visible={!!actionEntry} onClose={() => setActionEntry(null)} title={actionEntry?.name}>
+        {access?.isOwner && actionEntry?.isDir && (
+          <Pressable
+            onPress={() => {
+              const target = actionEntry;
+              setActionEntry(null);
+              if (target) navigation.navigate('Share', { path: target.path, name: target.name });
+            }}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.actionRow, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}
+          >
+            <UserPlus size={20} color={colors.primary} />
+            <AppText tone="primary">Share</AppText>
+          </Pressable>
+        )}
         {actionEntry?.canDelete ? (
           <Pressable
             onPress={() => confirmDelete(actionEntry)}
@@ -185,9 +199,11 @@ export function FolderScreen({ navigation, route }: Props) {
             <AppText tone="danger">Delete</AppText>
           </Pressable>
         ) : (
-          <AppText variant="caption" tone="muted" style={styles.noActions}>
-            Downloading and sharing are coming soon.
-          </AppText>
+          !access?.isOwner && (
+            <AppText variant="caption" tone="muted" style={styles.noActions}>
+              Downloading and sharing are coming soon.
+            </AppText>
+          )
         )}
       </Sheet>
     </View>

@@ -1,10 +1,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Folder, Settings as SettingsIcon, Shield, UploadCloud, type LucideIcon } from 'lucide-react-native';
 import { useAuth } from '../auth/AuthContext';
-import { AdminScreen } from '../screens/AdminScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { UploadsScreen } from '../screens/UploadsScreen';
 import { useTheme } from '../theme';
+import { AdminStack } from './AdminStack';
 import { FilesStack } from './FilesStack';
 import type { MainTabsParamList } from './types';
 
@@ -34,7 +34,7 @@ export function MainTabs() {
     >
       <Tab.Screen name="Files" component={FilesStack} options={{ headerShown: false, tabBarIcon: tabIcon(Folder) }} />
       <Tab.Screen name="Uploads" component={UploadsScreen} options={{ tabBarIcon: tabIcon(UploadCloud) }} />
-      {isOwner && <Tab.Screen name="Admin" component={AdminScreen} options={{ tabBarIcon: tabIcon(Shield) }} />}
+      {isOwner && <Tab.Screen name="Admin" component={AdminStack} options={{ headerShown: false, tabBarIcon: tabIcon(Shield) }} />}
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarIcon: tabIcon(SettingsIcon) }} />
     </Tab.Navigator>
   );

@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../config';
 import { authHeaders } from '../lib/auth-token';
-import type { Entry, FolderAccess, Me, StorageInfo, User } from '../shared/types';
+import type { ActivityItem, Entry, FolderAccess, Me, Person, Role, Share, StorageInfo, User } from '../shared/types';
 import { request } from './client';
 
 export { authHeaders };
@@ -30,6 +30,18 @@ export const api = {
   storage: () => request<StorageInfo>('GET', '/api/storage'),
   /** Owner-only: re-scan the storage folder for files added outside the app. */
   rescan: () => request<Record<string, number>>('POST', '/api/rescan'),
+
+  // --- Owner-only admin ---
+  /** Who a folder is shared with: `direct` shares on it, plus `inherited` shares from its ancestors. */
+  shares: (path: string) =>
+    request<{ path: string; direct: Share[]; inherited: Share[] }>('GET', `/api/admin/shares?path=${enc(path)}`),
+  addShare: (path: string, email: string, role: Role) =>
+    request<Share>('POST', '/api/admin/shares', { body: { path, email, role } }),
+  removeShare: (id: number) => request<{ ok: boolean }>('DELETE', `/api/admin/shares/${id}`),
+  users: () => request<{ users: Person[] }>('GET', '/api/admin/users'),
+  removeUser: (id: number) => request<{ ok: boolean }>('DELETE', `/api/admin/users/${id}`),
+  activity: (before?: number, limit = 50) =>
+    request<{ items: ActivityItem[] }>('GET', `/api/admin/activity?limit=${limit}${before ? `&before=${before}` : ''}`),
 };
 
 /** Absolute URLs for file content. Pass {@link authHeaders} as request headers so these carry the token. */
