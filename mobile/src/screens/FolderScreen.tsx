@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
-import { ArrowUpDown, Check, FolderOpen, FolderPlus, LayoutGrid, List, Search, Trash2, UserPlus } from 'lucide-react-native';
+import { ArrowUpDown, Check, FileUp, FolderOpen, FolderPlus, ImageUp, LayoutGrid, List, Plus, Search, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
@@ -15,6 +15,8 @@ import type { FilesStackParamList } from '../navigation/types';
 import { SORT_LABELS, SORTS } from '../shared/lib/entries';
 import type { Entry } from '../shared/types';
 import { useTheme } from '../theme';
+import { pickDocuments, pickPhotos } from '../uploads/pick';
+import { uploads } from '../uploads/store';
 
 type Props = NativeStackScreenProps<FilesStackParamList, 'Folder'>;
 
@@ -28,6 +30,7 @@ export function FolderScreen({ navigation, route }: Props) {
   const [sortOrder, setSortOrder] = useSortOrder();
   const [sortOpen, setSortOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [actionEntry, setActionEntry] = useState<Entry | null>(null);
   const { entries, loading, refreshing, error, refresh, access } = useFolder(path, sortOrder);
@@ -55,6 +58,21 @@ export function FolderScreen({ navigation, route }: Props) {
         { text: 'Delete', style: 'destructive', onPress: () => remove.mutate(entry.id) },
       ],
     );
+  };
+
+  const goToUploads = () => navigation.getParent()?.navigate('Uploads' as never);
+
+  const uploadPicked = async (pick: () => Promise<Awaited<ReturnType<typeof pickPhotos>>>) => {
+    setAddOpen(false);
+    try {
+      const files = await pick();
+      if (files.length) {
+        uploads.add(path, files);
+        goToUploads();
+      }
+    } catch (err) {
+      Alert.alert('Couldn’t pick files', (err as Error).message);
+    }
   };
 
   const submitNewFolder = () => {
@@ -103,9 +121,7 @@ export function FolderScreen({ navigation, route }: Props) {
             tone="primary"
             onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
           />
-          {canWrite && (
-            <IconButton icon={FolderPlus} accessibilityLabel="New folder" tone="primary" onPress={() => setNewFolderOpen(true)} />
-          )}
+          {canWrite && <IconButton icon={Plus} accessibilityLabel="Add" tone="primary" onPress={() => setAddOpen(true)} />}
         </View>
       ),
     });
@@ -157,6 +173,36 @@ export function FolderScreen({ navigation, route }: Props) {
             {order === sortOrder && <Check size={18} color={colors.primary} />}
           </Pressable>
         ))}
+      </Sheet>
+
+      <Sheet visible={addOpen} onClose={() => setAddOpen(false)} title="Add to this folder">
+        <Pressable
+          onPress={() => {
+            setAddOpen(false);
+            setNewFolderOpen(true);
+          }}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.actionRow, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}
+        >
+          <FolderPlus size={20} color={colors.text} />
+          <AppText>New folder</AppText>
+        </Pressable>
+        <Pressable
+          onPress={() => uploadPicked(pickPhotos)}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.actionRow, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}
+        >
+          <ImageUp size={20} color={colors.text} />
+          <AppText>Upload photos or videos</AppText>
+        </Pressable>
+        <Pressable
+          onPress={() => uploadPicked(pickDocuments)}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.actionRow, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}
+        >
+          <FileUp size={20} color={colors.text} />
+          <AppText>Upload files</AppText>
+        </Pressable>
       </Sheet>
 
       <Sheet visible={newFolderOpen} onClose={() => setNewFolderOpen(false)} title="New folder">
