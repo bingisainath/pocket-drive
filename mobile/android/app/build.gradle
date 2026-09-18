@@ -77,6 +77,15 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    // Use a modern CMake (ninja 1.12) whose ninja honours Windows LongPathsEnabled. The SDK's
+    // default CMake 3.22.1 ships an old ninja that fails on RN New-Architecture codegen paths
+    // longer than 260 chars (e.g. react-native-gesture-handler on Windows).
+    externalNativeBuild {
+        cmake {
+            version "3.31.6"
+        }
+    }
+
     namespace "com.bingisainath.pocketdrive"
     defaultConfig {
         applicationId "com.bingisainath.pocketdrive"
