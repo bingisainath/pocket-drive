@@ -16,10 +16,9 @@ export type AdminStackParamList = {
   Activity: undefined;
 };
 
-/** The bottom tabs. Admin is only registered for the owner. */
+/** The bottom tabs. Admin is only registered for the owner. Uploads show in a floating panel, not a tab. */
 export type MainTabsParamList = {
   Files: NavigatorScreenParams<FilesStackParamList> | undefined;
-  Uploads: undefined;
   Settings: undefined;
   Admin: undefined;
 };

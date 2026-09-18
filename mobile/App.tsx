@@ -1,11 +1,12 @@
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { StatusBar, StyleSheet, useColorScheme } from 'react-native';
+import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/auth/AuthContext';
 import { persistOptions, queryClient } from './src/lib/query';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { UploadPanel } from './src/uploads/UploadPanel';
 
 export default function App() {
   const dark = useColorScheme() === 'dark';
@@ -15,9 +16,12 @@ export default function App() {
         <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
         <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <AuthProvider>
-            <NavigationContainer theme={dark ? DarkTheme : DefaultTheme}>
-              <RootNavigator />
-            </NavigationContainer>
+            <View style={styles.root}>
+              <NavigationContainer theme={dark ? DarkTheme : DefaultTheme}>
+                <RootNavigator />
+              </NavigationContainer>
+              <UploadPanel />
+            </View>
           </AuthProvider>
         </PersistQueryClientProvider>
       </SafeAreaProvider>

@@ -1,8 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Folder, Settings as SettingsIcon, Shield, UploadCloud, type LucideIcon } from 'lucide-react-native';
+import { Folder, Settings as SettingsIcon, Shield, type LucideIcon } from 'lucide-react-native';
 import { useAuth } from '../auth/AuthContext';
 import { SettingsScreen } from '../screens/SettingsScreen';
-import { UploadsScreen } from '../screens/UploadsScreen';
 import { useTheme } from '../theme';
 import { AdminStack } from './AdminStack';
 import { FilesStack } from './FilesStack';
@@ -15,7 +14,7 @@ const tabIcon =
   ({ color, size }: { color: string; size: number }) =>
     <Icon color={color} size={size} />;
 
-/** Bottom tabs: Files, Uploads, Settings — plus an owner-only Admin tab. */
+/** Bottom tabs: Files, Settings — plus an owner-only Admin tab. Uploads show in a floating panel. */
 export function MainTabs() {
   const { colors } = useTheme();
   const { state } = useAuth();
@@ -33,7 +32,6 @@ export function MainTabs() {
       }}
     >
       <Tab.Screen name="Files" component={FilesStack} options={{ headerShown: false, tabBarIcon: tabIcon(Folder) }} />
-      <Tab.Screen name="Uploads" component={UploadsScreen} options={{ tabBarIcon: tabIcon(UploadCloud) }} />
       {isOwner && <Tab.Screen name="Admin" component={AdminStack} options={{ headerShown: false, tabBarIcon: tabIcon(Shield) }} />}
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarIcon: tabIcon(SettingsIcon) }} />
     </Tab.Navigator>

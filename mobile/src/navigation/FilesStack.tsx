@@ -26,7 +26,7 @@ export function FilesStack() {
       <Stack.Screen
         name="Folder"
         component={FolderScreen}
-        initialParams={{ path: '', title: isOwner ? 'My Drive' : 'Shared with me' }}
+        initialParams={{ path: '', title: isOwner ? 'Pocket Drive' : 'Shared with me' }}
         options={({ route }) => ({ title: route.params.title })}
       />
       <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />

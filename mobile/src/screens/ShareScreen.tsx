@@ -13,6 +13,11 @@ type Props = NativeStackScreenProps<FilesStackParamList, 'Share'>;
 
 const ROLES: Role[] = ['viewer', 'contributor', 'editor'];
 const ROLE_LABEL: Record<Role, string> = { viewer: 'Viewer', contributor: 'Contributor', editor: 'Editor' };
+const ROLE_DESC: Record<Role, string> = {
+  viewer: 'Can open and download files, but not change anything.',
+  contributor: 'Can view, download and add files — and delete only what they added.',
+  editor: 'Full access: view, add, and delete any file in the folder.',
+};
 
 export function ShareScreen({ navigation, route }: Props) {
   const { path, name } = route.params;
@@ -67,6 +72,9 @@ export function ShareScreen({ navigation, route }: Props) {
             );
           })}
         </View>
+        <AppText variant="caption" tone="muted">
+          {ROLE_DESC[role]}
+        </AppText>
         <Button label="Share" onPress={submit} loading={add.isPending} disabled={!email.trim()} />
       </View>
 
@@ -94,7 +102,7 @@ export function ShareScreen({ navigation, route }: Props) {
                     {s.user.name ?? s.user.email}
                   </AppText>
                   <AppText variant="caption" tone="muted">
-                    {ROLE_LABEL[s.role]} · via {s.path || 'My Drive'}
+                    {ROLE_LABEL[s.role]} · via {s.path || 'Pocket Drive'}
                   </AppText>
                 </View>
               ))}

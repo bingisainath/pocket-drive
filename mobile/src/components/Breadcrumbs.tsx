@@ -11,7 +11,7 @@ export interface Crumb {
 
 /** The trail from the user's home down to `path`. Members can't go above the folder shared with them. */
 export function buildCrumbs(path: string, isOwner: boolean, accessRoot: string | null): Crumb[] {
-  const home: Crumb = { name: isOwner ? 'My Drive' : 'Shared with me', path: '' };
+  const home: Crumb = { name: isOwner ? 'Pocket Drive' : 'Shared with me', path: '' };
   if (!path) return [home];
   const crumbs: Crumb[] = [home];
   let acc = '';

@@ -60,16 +60,11 @@ export function FolderScreen({ navigation, route }: Props) {
     );
   };
 
-  const goToUploads = () => navigation.getParent()?.navigate('Uploads' as never);
-
   const uploadPicked = async (pick: () => Promise<Awaited<ReturnType<typeof pickPhotos>>>) => {
     setAddOpen(false);
     try {
       const files = await pick();
-      if (files.length) {
-        uploads.add(path, files);
-        goToUploads();
-      }
+      if (files.length) uploads.add(path, files); // the floating upload panel shows progress
     } catch (err) {
       Alert.alert('Couldn’t pick files', (err as Error).message);
     }
@@ -133,7 +128,7 @@ export function FolderScreen({ navigation, route }: Props) {
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: colors.surface }]}>
       <OfflineBanner />
       <Breadcrumbs path={path} isOwner={access?.isOwner ?? false} accessRoot={access?.accessRoot ?? null} onNavigate={goToCrumb} />
       <FlashList
@@ -152,7 +147,7 @@ export function FolderScreen({ navigation, route }: Props) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
-        contentContainerStyle={{ backgroundColor: colors.surface, paddingBottom: space[8] }}
+        contentContainerStyle={{ backgroundColor: colors.surface, paddingBottom: space[4] }}
         ListEmptyComponent={
           <EmptyState icon={FolderOpen} title="Nothing here yet" message="Files you add to this folder will show up here." />
         }
