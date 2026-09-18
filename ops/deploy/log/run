@@ -1,0 +1,5 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Log to $PREFIX/var/log/sv/deploy/current.
+dir=/data/data/com.termux/files/usr/var/log/sv/deploy
+mkdir -p "$dir"
+exec svlogd -tt "$dir"
