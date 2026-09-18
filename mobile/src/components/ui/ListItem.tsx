@@ -11,12 +11,13 @@ interface Props {
   /** Trailing visual: a chevron, switch or menu button. */
   trailing?: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   /** Overrides the default TalkBack label (defaults to the title). */
   accessibilityLabel?: string;
 }
 
 /** A standard row: leading visual, title + optional subtitle, optional trailing. Used across all lists. */
-export function ListItem({ title, subtitle, leading, trailing, onPress, accessibilityLabel }: Props) {
+export function ListItem({ title, subtitle, leading, trailing, onPress, onLongPress, accessibilityLabel }: Props) {
   const { colors, space } = useTheme();
   const body = (
     <View style={[styles.row, { paddingHorizontal: space[4], paddingVertical: space[3], gap: space[3] }]}>
@@ -35,10 +36,11 @@ export function ListItem({ title, subtitle, leading, trailing, onPress, accessib
     </View>
   );
 
-  if (!onPress) return body;
+  if (!onPress && !onLongPress) return body;
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       style={({ pressed }) => ({ backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}

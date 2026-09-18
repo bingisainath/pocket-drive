@@ -1,14 +1,15 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
-import { ArrowUpDown, Check, FolderOpen, LayoutGrid, List, Search } from 'lucide-react-native';
+import { ArrowUpDown, Check, FolderOpen, FolderPlus, LayoutGrid, List, Search, Trash2 } from 'lucide-react-native';
 import { useCallback, useLayoutEffect, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { EntryCell } from '../components/EntryCell';
 import { EntryRow } from '../components/EntryRow';
 import { OfflineBanner } from '../components/OfflineBanner';
-import { AppText, EmptyState, IconButton, Sheet } from '../components/ui';
+import { AppText, Button, EmptyState, IconButton, Sheet, TextField } from '../components/ui';
 import { useFolder } from '../hooks/useFolder';
+import { useFolderActions } from '../hooks/useFolderActions';
 import { useSortOrder, useViewMode } from '../lib/prefs';
 import type { FilesStackParamList } from '../navigation/types';
 import { SORT_LABELS, SORTS } from '../shared/lib/entries';
@@ -26,8 +27,13 @@ export function FolderScreen({ navigation, route }: Props) {
   const [viewMode, setViewMode] = useViewMode();
   const [sortOrder, setSortOrder] = useSortOrder();
   const [sortOpen, setSortOpen] = useState(false);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState('');
+  const [actionEntry, setActionEntry] = useState<Entry | null>(null);
   const { entries, loading, refreshing, error, refresh, access } = useFolder(path, sortOrder);
+  const { createFolder, remove } = useFolderActions(path);
   const tile = Math.floor(width / COLUMNS);
+  const canWrite = access?.canWrite ?? false;
 
   const open = useCallback(
     (entry: Entry) => {
@@ -36,6 +42,32 @@ export function FolderScreen({ navigation, route }: Props) {
     },
     [navigation],
   );
+
+  const onLongPress = useCallback((entry: Entry) => setActionEntry(entry), []);
+
+  const confirmDelete = (entry: Entry) => {
+    setActionEntry(null);
+    Alert.alert(
+      `Delete “${entry.name}”?`,
+      entry.isDir ? 'This deletes the folder and everything inside it.' : 'This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => remove.mutate(entry.id) },
+      ],
+    );
+  };
+
+  const submitNewFolder = () => {
+    const name = folderName.trim();
+    if (!name) return;
+    createFolder.mutate(name, {
+      onSuccess: () => {
+        setNewFolderOpen(false);
+        setFolderName('');
+      },
+      onError: (err) => Alert.alert('Couldn’t create folder', (err as Error).message),
+    });
+  };
 
   // Jump to a breadcrumb: pop back to that folder if it's in the stack, otherwise open it fresh.
   const goToCrumb = useCallback(
@@ -71,10 +103,13 @@ export function FolderScreen({ navigation, route }: Props) {
             tone="primary"
             onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
           />
+          {canWrite && (
+            <IconButton icon={FolderPlus} accessibilityLabel="New folder" tone="primary" onPress={() => setNewFolderOpen(true)} />
+          )}
         </View>
       ),
     });
-  }, [navigation, viewMode, setViewMode]);
+  }, [navigation, viewMode, setViewMode, canWrite]);
 
   if (loading) return <EmptyState loading />;
   if (error && entries.length === 0) {
@@ -91,7 +126,11 @@ export function FolderScreen({ navigation, route }: Props) {
         numColumns={viewMode === 'grid' ? COLUMNS : 1}
         keyExtractor={(entry) => String(entry.id)}
         renderItem={({ item }) =>
-          viewMode === 'grid' ? <EntryCell entry={item} tile={tile} onPress={open} /> : <EntryRow entry={item} onPress={open} />
+          viewMode === 'grid' ? (
+            <EntryCell entry={item} tile={tile} onPress={open} onLongPress={onLongPress} />
+          ) : (
+            <EntryRow entry={item} onPress={open} onLongPress={onLongPress} />
+          )
         }
         ItemSeparatorComponent={viewMode === 'list' ? Separator : undefined}
         refreshControl={
@@ -119,6 +158,38 @@ export function FolderScreen({ navigation, route }: Props) {
           </Pressable>
         ))}
       </Sheet>
+
+      <Sheet visible={newFolderOpen} onClose={() => setNewFolderOpen(false)} title="New folder">
+        <View style={{ gap: space[3] }}>
+          <TextField
+            placeholder="Folder name"
+            value={folderName}
+            onChangeText={setFolderName}
+            autoFocus
+            autoCapitalize="sentences"
+            onSubmitEditing={submitNewFolder}
+            returnKeyType="done"
+          />
+          <Button label="Create" onPress={submitNewFolder} loading={createFolder.isPending} disabled={!folderName.trim()} />
+        </View>
+      </Sheet>
+
+      <Sheet visible={!!actionEntry} onClose={() => setActionEntry(null)} title={actionEntry?.name}>
+        {actionEntry?.canDelete ? (
+          <Pressable
+            onPress={() => confirmDelete(actionEntry)}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.actionRow, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}
+          >
+            <Trash2 size={20} color={colors.danger} />
+            <AppText tone="danger">Delete</AppText>
+          </Pressable>
+        ) : (
+          <AppText variant="caption" tone="muted" style={styles.noActions}>
+            Downloading and sharing are coming soon.
+          </AppText>
+        )}
+      </Sheet>
     </View>
   );
 }
@@ -133,4 +204,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 76 },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 4 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 4 },
+  noActions: { paddingVertical: 12, paddingHorizontal: 4 },
 });

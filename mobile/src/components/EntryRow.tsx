@@ -9,9 +9,10 @@ import { ListItem } from './ui';
 interface Props {
   entry: Entry;
   onPress: (entry: Entry) => void;
+  onLongPress?: (entry: Entry) => void;
 }
 
-function EntryRowBase({ entry, onPress }: Props) {
+function EntryRowBase({ entry, onPress, onLongPress }: Props) {
   const { colors } = useTheme();
   const detail = entry.isDir
     ? entry.childCount === null
@@ -26,6 +27,7 @@ function EntryRowBase({ entry, onPress }: Props) {
       leading={<FileThumb entry={entry} size={48} />}
       trailing={entry.isDir ? <ChevronRight size={20} color={colors.muted} /> : undefined}
       onPress={() => onPress(entry)}
+      onLongPress={onLongPress ? () => onLongPress(entry) : undefined}
     />
   );
 }

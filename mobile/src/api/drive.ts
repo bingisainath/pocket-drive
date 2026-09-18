@@ -28,6 +28,8 @@ export const api = {
     request<Entry>('POST', '/api/folders', { body: { parentPath, name } }),
   remove: (id: number) => request<{ deleted: number }>('DELETE', `/api/entries/${id}`),
   storage: () => request<StorageInfo>('GET', '/api/storage'),
+  /** Owner-only: re-scan the storage folder for files added outside the app. */
+  rescan: () => request<Record<string, number>>('POST', '/api/rescan'),
 };
 
 /** Absolute URLs for file content. Pass {@link authHeaders} as request headers so these carry the token. */

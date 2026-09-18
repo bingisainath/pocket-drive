@@ -11,11 +11,12 @@ interface Props {
   /** The column (tile) width in px, computed by the grid from the screen width. */
   tile: number;
   onPress: (entry: Entry) => void;
+  onLongPress?: (entry: Entry) => void;
 }
 
 const PAD = 8;
 
-function EntryCellBase({ entry, tile, onPress }: Props) {
+function EntryCellBase({ entry, tile, onPress, onLongPress }: Props) {
   const { space } = useTheme();
   const detail = entry.isDir
     ? entry.childCount === null
@@ -26,6 +27,7 @@ function EntryCellBase({ entry, tile, onPress }: Props) {
   return (
     <Pressable
       onPress={() => onPress(entry)}
+      onLongPress={onLongPress ? () => onLongPress(entry) : undefined}
       accessibilityRole="button"
       accessibilityLabel={entry.name}
       style={({ pressed }) => [styles.cell, { width: tile, padding: PAD, gap: space[1], opacity: pressed ? 0.7 : 1 }]}
