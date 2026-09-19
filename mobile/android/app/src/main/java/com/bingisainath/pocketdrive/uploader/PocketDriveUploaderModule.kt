@@ -116,6 +116,33 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
     UploadSettings.setWifiOnly(reactContext, value)
   }
 
+  @ReactMethod
+  fun getCameraBackup(promise: Promise) {
+    promise.resolve(
+      Arguments.createMap().apply {
+        putBoolean("enabled", UploadSettings.cameraBackupEnabled(reactContext))
+        putString("folder", UploadSettings.cameraBackupFolder(reactContext))
+      },
+    )
+  }
+
+  /** Enable/disable camera backup. Enabling sets the watermark to "now" so only new media is sent. */
+  @ReactMethod
+  fun setCameraBackup(enabled: Boolean, folder: String) {
+    val since = if (enabled) System.currentTimeMillis() / 1000 else 0
+    UploadSettings.setCameraBackup(reactContext, enabled, folder, since)
+  }
+
+  /** Scan for new photos/videos and enqueue them; resolves with the number queued. */
+  @ReactMethod
+  fun scanCameraBackup(baseUrl: String, token: String, promise: Promise) {
+    try {
+      promise.resolve(MediaBackup.scan(reactContext, baseUrl, token))
+    } catch (e: Exception) {
+      promise.reject("scan_failed", e.message ?: "Camera backup scan failed", e)
+    }
+  }
+
   /** Download a file to the public Downloads folder via Android's DownloadManager (no permission
    *  needed), sending the Bearer token. Shows a system download notification. */
   @ReactMethod

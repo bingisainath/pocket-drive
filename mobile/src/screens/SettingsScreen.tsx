@@ -7,7 +7,8 @@ import { useAuth } from '../auth/AuthContext';
 import { StorageMeter } from '../components/StorageMeter';
 import { AppText, Button } from '../components/ui';
 import { useTheme } from '../theme';
-import { getWifiOnly, setWifiOnly } from '../uploads/native';
+import { disableCameraBackup, enableCameraBackup } from '../uploads/cameraBackup';
+import { getCameraBackup, getWifiOnly, setWifiOnly } from '../uploads/native';
 
 export function SettingsScreen() {
   const { colors, space } = useTheme();
@@ -17,12 +18,32 @@ export function SettingsScreen() {
   const qc = useQueryClient();
 
   const [wifiOnly, setWifiOnlyState] = useState(true);
+  const [cameraBackup, setCameraBackupState] = useState(false);
+  const [savingBackup, setSavingBackup] = useState(false);
   useEffect(() => {
     getWifiOnly().then(setWifiOnlyState).catch(() => {});
+    getCameraBackup().then((s) => setCameraBackupState(s.enabled)).catch(() => {});
   }, []);
   const toggleWifiOnly = (value: boolean) => {
     setWifiOnlyState(value); // native applies it to the next scheduled upload
     setWifiOnly(value);
+  };
+  const toggleCameraBackup = async (value: boolean) => {
+    setSavingBackup(true);
+    try {
+      if (value) {
+        await enableCameraBackup(); // asks for permission + creates the "Camera Backup" folder
+        setCameraBackupState(true);
+      } else {
+        disableCameraBackup();
+        setCameraBackupState(false);
+      }
+    } catch (err) {
+      setCameraBackupState(false);
+      Alert.alert('Camera backup', (err as Error).message);
+    } finally {
+      setSavingBackup(false);
+    }
   };
 
   const rescan = useMutation({
@@ -89,6 +110,22 @@ export function SettingsScreen() {
             accessibilityLabel="Upload on Wi-Fi only"
           />
         </View>
+
+        <View style={[styles.row, styles.rowDivider, { borderTopColor: colors.border }]}>
+          <View style={styles.rowText}>
+            <AppText variant="body">Back up photos &amp; videos</AppText>
+            <AppText variant="caption" tone="muted">
+              New photos and videos upload automatically to “Camera Backup”.
+            </AppText>
+          </View>
+          <Switch
+            value={cameraBackup}
+            onValueChange={toggleCameraBackup}
+            disabled={savingBackup}
+            trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+            accessibilityLabel="Back up photos and videos"
+          />
+        </View>
       </View>
 
       <AppText variant="caption" tone="muted">
@@ -105,5 +142,6 @@ export function SettingsScreen() {
 const styles = StyleSheet.create({
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, gap: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 14, paddingTop: 14 },
   rowText: { flex: 1, minWidth: 0, gap: 2 },
 });

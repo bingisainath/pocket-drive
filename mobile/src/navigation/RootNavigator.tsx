@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState } from '../components/ui';
 import { LoginScreen } from '../screens/LoginScreen';
+import { CameraBackupWatcher } from '../uploads/CameraBackupWatcher';
 import { SharedFilesWatcher } from '../uploads/SharedFilesWatcher';
 import { MainTabs } from './MainTabs';
 import type { RootStackParamList } from './types';
@@ -19,6 +20,7 @@ export function RootNavigator() {
   return (
     <>
       {signedIn && <SharedFilesWatcher />}
+      {signedIn && <CameraBackupWatcher />}
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {signedIn ? (
           <Stack.Screen name="Main" component={MainTabs} />

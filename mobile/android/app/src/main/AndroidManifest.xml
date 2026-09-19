@@ -9,8 +9,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
-    <!-- Progress notification for uploads (and, later, push). -->
+    <!-- Progress notification for uploads (and push). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Camera backup: read the device's photos/videos to upload new ones. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <application
       android:name=".MainApplication"

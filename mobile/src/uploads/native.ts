@@ -44,6 +44,9 @@ const Native = NativeModules.PocketDriveUploader as {
   getSharedFiles(): Promise<SharedFileItem[]>;
   getWifiOnly(): Promise<boolean>;
   setWifiOnly(value: boolean): void;
+  getCameraBackup(): Promise<{ enabled: boolean; folder: string }>;
+  setCameraBackup(enabled: boolean, folder: string): void;
+  scanCameraBackup(baseUrl: string, token: string): Promise<number>;
   download(url: string, filename: string, mimeType: string, token: string): Promise<boolean>;
   addListener(event: string): void;
   removeListeners(count: number): void;
@@ -108,6 +111,20 @@ export function getWifiOnly(): Promise<boolean> {
 
 export function setWifiOnly(value: boolean) {
   Native.setWifiOnly(value);
+}
+
+/** Camera backup on/off + the drive folder new media is uploaded to. */
+export function getCameraBackup(): Promise<{ enabled: boolean; folder: string }> {
+  return Native.getCameraBackup();
+}
+
+export function setCameraBackup(enabled: boolean, folder: string) {
+  Native.setCameraBackup(enabled, folder);
+}
+
+/** Scan for new photos/videos and enqueue them; resolves with the number queued. */
+export function scanCameraBackup(): Promise<number> {
+  return Native.scanCameraBackup(API_BASE_URL, currentToken() ?? '');
 }
 
 /** Download a file to the device's Downloads folder (DownloadManager, with the Bearer token). */
