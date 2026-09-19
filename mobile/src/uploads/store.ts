@@ -90,6 +90,11 @@ function wire() {
   onUploadEvent((e: UploadEvent) => {
     if (e.type === 'progress') return patch(e.id, { status: 'uploading', uploaded: e.uploaded });
     if (e.type === 'reconnecting') return patch(e.id, { status: e.reconnecting ? 'reconnecting' : 'uploading' });
+    if (e.type === 'removed') {
+      // Source file was deleted before it uploaded — drop it from the panel entirely.
+      tasks = tasks.filter((t) => t.id !== e.id);
+      return emit();
+    }
     const task = tasks.find((t) => t.id === e.id);
     if (e.type === 'done') {
       patch(e.id, { status: 'done', uploaded: task?.size ?? 0 });

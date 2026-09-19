@@ -57,7 +57,8 @@ export type UploadEvent =
   | { id: string; type: 'reconnecting'; reconnecting: boolean }
   | { id: string; type: 'done'; file: string }
   | { id: string; type: 'error'; message: string }
-  | { id: string; type: 'cancelled' };
+  | { id: string; type: 'cancelled' }
+  | { id: string; type: 'removed' };
 
 export interface UploadItem {
   id: string;

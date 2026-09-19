@@ -13,6 +13,9 @@ sealed class UploadEvent(val id: String, val type: String) {
   class Done(id: String, val file: String) : UploadEvent(id, "done")
   class Failed(id: String, val message: String) : UploadEvent(id, "error")
   class Cancelled(id: String) : UploadEvent(id, "cancelled")
+
+  /** The source file was deleted, so the job was dropped without uploading — remove it from the UI. */
+  class Removed(id: String) : UploadEvent(id, "removed")
 }
 
 /**
@@ -91,6 +94,14 @@ object UploadRunner {
   }
 
   private fun runOne(app: Context, queue: UploadQueue, job: UploadJob) {
+    // The source may have been deleted since it was queued (common with camera backup). Drop it
+    // quietly rather than uploading a phantom or leaving a failed row behind.
+    if (!sourceReadable(app, job.uri)) {
+      queue.remove(job.id)
+      emit(UploadEvent.Removed(job.id))
+      return
+    }
+
     val upload = ResumableUpload(
       resolver = app.contentResolver,
       baseUrl = job.baseUrl,
@@ -126,6 +137,11 @@ object UploadRunner {
         // A preemption, not a user cancel: keep the partial upload and let it resume next run.
         queue.setStatus(job.id, UploadQueue.PENDING)
       }
+    } catch (e: ResumableUpload.SourceMissingException) {
+      // Deleted mid-upload: abandon the server session and drop the job silently.
+      upload.discard()
+      queue.remove(job.id)
+      emit(UploadEvent.Removed(job.id))
     } catch (e: Exception) {
       queue.setStatus(job.id, UploadQueue.ERROR, e.message ?: "Upload failed")
       emit(UploadEvent.Failed(job.id, e.message ?: "Upload failed"))
@@ -133,6 +149,11 @@ object UploadRunner {
       active.remove(job.id)
     }
   }
+
+  /** Can we still open the job's source? False once the underlying file has been deleted. */
+  private fun sourceReadable(app: Context, uri: String): Boolean =
+    runCatching { app.contentResolver.openInputStream(Uri.parse(uri))?.use { true } ?: false }
+      .getOrDefault(false)
 
   private fun emit(event: UploadEvent) {
     listener?.invoke(event)

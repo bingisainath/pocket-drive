@@ -34,6 +34,9 @@ class ResumableUpload(
 
   class CancelledException : Exception("Cancelled")
 
+  /** The source file can no longer be read (e.g. the user deleted it) — the job should be dropped. */
+  class SourceMissingException : Exception("Source file is missing")
+
   private companion object {
     val RETRYABLE = setOf(0, 408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524)
     const val MAX_ATTEMPTS = 10
@@ -150,7 +153,12 @@ class ResumableUpload(
 
   /** Open the content URI positioned at [start] bytes (re-opened per chunk; skip handles resync jumps). */
   private fun openStreamAt(start: Long): InputStream {
-    val input = resolver.openInputStream(uri) ?: throw HttpError(0, "Can't read the file", -1)
+    val input = try {
+      resolver.openInputStream(uri)
+    } catch (e: Exception) {
+      // FileNotFoundException etc. — the underlying file is gone.
+      throw SourceMissingException()
+    } ?: throw SourceMissingException()
     var remaining = start
     while (remaining > 0) {
       val skipped = input.skip(remaining)

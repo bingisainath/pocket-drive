@@ -202,6 +202,7 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
       is UploadEvent.Done -> putString("file", file)
       is UploadEvent.Failed -> putString("message", message)
       is UploadEvent.Cancelled -> {}
+      is UploadEvent.Removed -> {}
     }
   }
 
