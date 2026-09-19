@@ -15,4 +15,4 @@ export const APP_VERSION = '1';
  * audience). Set this to enable "Continue with Google". Leave empty to hide the button.
  * e.g. '1234-abc.apps.googleusercontent.com'
  */
-export const GOOGLE_WEB_CLIENT_ID = '';
+export const GOOGLE_WEB_CLIENT_ID = '497807800114-b9fe0b84r6ju9kft0jp11qokv4mo2400.apps.googleusercontent.com';
