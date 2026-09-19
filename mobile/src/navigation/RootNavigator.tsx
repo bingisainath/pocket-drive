@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState } from '../components/ui';
 import { LoginScreen } from '../screens/LoginScreen';
+import { SharedFilesWatcher } from '../uploads/SharedFilesWatcher';
 import { MainTabs } from './MainTabs';
 import type { RootStackParamList } from './types';
 
@@ -13,13 +14,18 @@ export function RootNavigator() {
 
   if (state.status === 'loading') return <EmptyState loading />;
 
+  const signedIn = state.status === 'signedIn';
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {state.status === 'signedIn' ? (
-        <Stack.Screen name="Main" component={MainTabs} />
-      ) : (
-        <Stack.Screen name="Login" component={LoginScreen} />
-      )}
-    </Stack.Navigator>
+    <>
+      {signedIn && <SharedFilesWatcher />}
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {signedIn ? (
+          <Stack.Screen name="Main" component={MainTabs} />
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </>
   );
 }

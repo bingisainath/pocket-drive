@@ -16,6 +16,14 @@ export interface NativeQueueItem {
   error?: string;
 }
 
+/** A file another app shared into Pocket Drive, already copied to cache (see SharedImport.kt). */
+export interface SharedFileItem {
+  uri: string;
+  name: string;
+  size: number;
+  lastModified: number;
+}
+
 /** The native uploader module (Kotlin). Untyped over the bridge, wrapped with types here. */
 const Native = NativeModules.PocketDriveUploader as {
   enqueue(
@@ -33,6 +41,7 @@ const Native = NativeModules.PocketDriveUploader as {
   remove(id: string): void;
   clearFinished(): void;
   getQueue(): Promise<NativeQueueItem[]>;
+  getSharedFiles(): Promise<SharedFileItem[]>;
   getWifiOnly(): Promise<boolean>;
   setWifiOnly(value: boolean): void;
   download(url: string, filename: string, mimeType: string, token: string): Promise<boolean>;
@@ -85,6 +94,11 @@ export function clearFinishedUploads() {
 /** Read the persisted queue (used to hydrate the panel on app start). */
 export function getQueue(): Promise<NativeQueueItem[]> {
   return Native.getQueue();
+}
+
+/** Pull (and clear) any files shared into the app from other apps. */
+export function getSharedFiles(): Promise<SharedFileItem[]> {
+  return Native.getSharedFiles();
 }
 
 /** Background uploads network policy: true = Wi-Fi (unmetered) only. */

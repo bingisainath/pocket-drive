@@ -89,6 +89,23 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
     promise.resolve(array)
   }
 
+  /** Return (and clear) files shared into the app, copied to cache and ready to enqueue. */
+  @ReactMethod
+  fun getSharedFiles(promise: Promise) {
+    val array: WritableArray = Arguments.createArray()
+    SharedImport.drain(reactContext).forEach { shared ->
+      array.pushMap(
+        Arguments.createMap().apply {
+          putString("uri", shared.uri)
+          putString("name", shared.name)
+          putDouble("size", shared.size.toDouble())
+          putDouble("lastModified", shared.lastModified.toDouble())
+        },
+      )
+    }
+    promise.resolve(array)
+  }
+
   @ReactMethod
   fun getWifiOnly(promise: Promise) {
     promise.resolve(UploadSettings.wifiOnly(reactContext))
