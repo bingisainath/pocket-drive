@@ -17,6 +17,8 @@ export const StorageKey = {
   uploadOnMobileData: 'pref.uploadOnMobileData',
   /** JSON User — the last signed-in user, so a cold offline launch stays signed in. */
   lastUser: 'auth.lastUser',
+  /** string — this device's FCM push token, kept so we can unregister it on sign-out. */
+  pushToken: 'push.token',
 } as const;
 
 /** Remove everything in {@link storage} — used on sign-out and user change. */

@@ -1,15 +1,29 @@
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { useEffect } from 'react';
 import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/auth/AuthContext';
 import { persistOptions, queryClient } from './src/lib/query';
+import { navigationRef } from './src/navigation/ref';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { configurePush } from './src/push/push';
 import { UploadPanel } from './src/uploads/UploadPanel';
 
 export default function App() {
   const dark = useColorScheme() === 'dark';
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    configurePush()
+      .then((unsub) => {
+        cleanup = unsub;
+      })
+      .catch(() => {}); // push just won't work (e.g. no Play services); the app still runs
+    return () => cleanup?.();
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
@@ -17,7 +31,7 @@ export default function App() {
         <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <AuthProvider>
             <View style={styles.root}>
-              <NavigationContainer theme={dark ? DarkTheme : DefaultTheme}>
+              <NavigationContainer ref={navigationRef} theme={dark ? DarkTheme : DefaultTheme}>
                 <RootNavigator />
               </NavigationContainer>
               <UploadPanel />

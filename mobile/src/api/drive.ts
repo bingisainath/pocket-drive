@@ -18,6 +18,11 @@ export const api = {
   tokenGoogle: (idToken: string) =>
     request<{ token: string; user: User }>('POST', '/api/auth/token/google', { body: { idToken } }),
   logout: () => request<void>('POST', '/api/auth/logout'),
+  /** Register this device's FCM token for push notifications. */
+  registerDevice: (token: string) =>
+    request<void>('POST', '/api/devices', { body: { token, platform: 'android' } }),
+  /** Remove this device's FCM token (on sign-out or token rotation). */
+  unregisterDevice: (token: string) => request<void>('DELETE', '/api/devices', { body: { token } }),
   /** Delete the signed-in (non-owner) account. */
   deleteAccount: () => request<{ deleted: boolean; message: string }>('DELETE', '/api/auth/account'),
   list: (path: string, signal?: AbortSignal) =>

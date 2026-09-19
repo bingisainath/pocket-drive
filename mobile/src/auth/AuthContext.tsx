@@ -4,6 +4,7 @@ import { api } from '../api/drive';
 import { clearToken, currentToken, loadToken, saveToken } from '../lib/auth-token';
 import { queryClient } from '../lib/query';
 import { clearStorage, storage, StorageKey } from '../lib/storage';
+import { registerDeviceToken, unregisterDeviceToken } from '../push/push';
 import type { User } from '../shared/types';
 
 const saveLastUser = (user: User) => storage.set(StorageKey.lastUser, JSON.stringify(user));
@@ -83,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    await unregisterDeviceToken().catch(() => {}); // needs the token, so before clearLocalData
     await api.logout().catch(() => {}); // revoke server-side if reachable; sign out locally regardless
     await clearLocalData();
     setState({ status: 'signedOut' });
@@ -98,6 +100,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ status: 'signedOut', error: 'Your session ended. Please sign in again.' });
     });
   }, [refresh]);
+
+  // Keep this device's push token registered whenever signed in (covers fresh sign-in and a cold
+  // launch that restores the session). The refresh listener is torn down when we sign out.
+  useEffect(() => {
+    if (state.status !== 'signedIn') return;
+    let unsub: (() => void) | undefined;
+    registerDeviceToken()
+      .then((u) => {
+        unsub = u;
+      })
+      .catch(() => {});
+    return () => unsub?.();
+  }, [state.status]);
 
   const value = useMemo(
     () => ({ state, signIn, signInWithGoogle, signOut, refresh }),

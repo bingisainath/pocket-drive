@@ -21,6 +21,13 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+
+      <!-- Fallback channel for FCM notifications that arrive while the app is dead (the backend
+           normally sets its own channel_id per message). -->
+      <meta-data
+        android:name="com.google.firebase.messaging.default_notification_channel_id"
+        android:value="activity" />
+
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
