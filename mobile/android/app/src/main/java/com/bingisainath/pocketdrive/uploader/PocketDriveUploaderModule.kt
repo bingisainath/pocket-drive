@@ -9,42 +9,94 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The native uploader. JS enqueues a picked file (content URI) with the drive's base URL and the
- * Bearer token; each upload runs on its own worker thread via [ResumableUpload] and reports back
- * through the "PocketDriveUpload" device event. This slice runs while the app is alive; a later
- * slice moves it onto user-initiated jobs / WorkManager for background + reboot resume.
+ * The bridge between JS and the durable, background-capable uploader. JS enqueues picked files;
+ * they are persisted to [UploadQueue] and drained by [UploadRunner] via a JobScheduler job
+ * (API 34+) or WorkManager worker, so uploads continue in the background and across reboots. While
+ * the app is alive this module relays live progress to JS through the "PocketDriveUpload" event.
  */
 class PocketDriveUploaderModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
   override fun getName() = NAME
 
-  private val uploads = ConcurrentHashMap<String, ResumableUpload>()
+  init {
+    // Relay drainer events to JS whenever a React instance is around to receive them.
+    UploadRunner.listener = { event -> emit(event.toMap()) }
+  }
+
+  override fun invalidate() {
+    UploadRunner.listener = null
+    super.invalidate()
+  }
 
   @ReactMethod
   fun enqueue(id: String, uri: String, name: String, size: Double, lastModified: Double, folder: String, baseUrl: String, token: String) {
-    val upload = ResumableUpload(
-      resolver = reactContext.contentResolver,
-      baseUrl = baseUrl.trimEnd('/'),
-      token = token,
-      uri = Uri.parse(uri),
-      name = name,
-      size = size.toLong(),
-      lastModified = lastModified.toLong(),
-      folder = folder,
+    val queue = UploadQueue.get(reactContext)
+    val trimmedBase = baseUrl.trimEnd('/')
+    queue.insert(
+      UploadJob(
+        id = id,
+        uri = uri,
+        name = name,
+        size = size.toLong(),
+        lastModified = lastModified.toLong(),
+        folder = folder,
+        baseUrl = trimmedBase,
+        token = token,
+        status = UploadQueue.PENDING,
+        uploaded = 0,
+        sessionId = null,
+        error = null,
+        createdAt = System.currentTimeMillis(),
+      ),
     )
-    uploads[id] = upload
-    Thread({ runUpload(id, upload) }, "pd-upload-$id").start()
+    // A fresh token was just supplied; apply it to any older jobs whose token may have expired.
+    queue.refreshAuth(trimmedBase, token)
+    UploadScheduler.schedule(reactContext)
   }
 
   @ReactMethod
   fun cancel(id: String) {
-    uploads[id]?.cancel()
+    UploadRunner.cancel(reactContext, id)
+  }
+
+  @ReactMethod
+  fun retry(id: String) {
+    UploadQueue.get(reactContext).requeue(id)
+    UploadScheduler.schedule(reactContext)
+  }
+
+  @ReactMethod
+  fun remove(id: String) {
+    UploadQueue.get(reactContext).remove(id)
+  }
+
+  @ReactMethod
+  fun clearFinished() {
+    UploadQueue.get(reactContext).clearFinished()
+  }
+
+  /** Hydrate the JS panel from the persisted queue on app start. */
+  @ReactMethod
+  fun getQueue(promise: Promise) {
+    val array: WritableArray = Arguments.createArray()
+    UploadQueue.get(reactContext).all().forEach { array.pushMap(it.toMap()) }
+    promise.resolve(array)
+  }
+
+  @ReactMethod
+  fun getWifiOnly(promise: Promise) {
+    promise.resolve(UploadSettings.wifiOnly(reactContext))
+  }
+
+  @ReactMethod
+  fun setWifiOnly(value: Boolean) {
+    UploadSettings.setWifiOnly(reactContext, value)
   }
 
   /** Download a file to the public Downloads folder via Android's DownloadManager (no permission
@@ -72,37 +124,35 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
 
   @ReactMethod fun removeListeners(count: Double) {}
 
-  private fun runUpload(id: String, upload: ResumableUpload) {
-    val callbacks = object : ResumableUpload.Callbacks {
-      override fun onProgress(uploaded: Long, total: Long) = emit(event(id, "progress").apply {
+  private fun UploadJob.toMap(): WritableMap = Arguments.createMap().apply {
+    putString("id", id)
+    putString("uri", uri)
+    putString("name", name)
+    putDouble("size", size.toDouble())
+    putDouble("lastModified", lastModified.toDouble())
+    putString("folder", folder)
+    putString("status", status)
+    putDouble("uploaded", uploaded.toDouble())
+    if (error != null) putString("error", error)
+  }
+
+  private fun UploadEvent.toMap(): WritableMap = Arguments.createMap().apply {
+    putString("id", id)
+    putString("type", type)
+    when (this@toMap) {
+      is UploadEvent.Progress -> {
         putDouble("uploaded", uploaded.toDouble())
         putDouble("total", total.toDouble())
-      })
-
-      override fun onReconnecting(reconnecting: Boolean) = emit(event(id, "reconnecting").apply {
-        putBoolean("reconnecting", reconnecting)
-      })
-    }
-    try {
-      val file = upload.run(callbacks)
-      emit(event(id, "done").apply { putString("file", file.toString()) })
-    } catch (e: ResumableUpload.CancelledException) {
-      upload.discard()
-      emit(event(id, "cancelled"))
-    } catch (e: Exception) {
-      emit(event(id, "error").apply { putString("message", e.message ?: "Upload failed") })
-    } finally {
-      uploads.remove(id)
+      }
+      is UploadEvent.Reconnecting -> putBoolean("reconnecting", reconnecting)
+      is UploadEvent.Done -> putString("file", file)
+      is UploadEvent.Failed -> putString("message", message)
+      is UploadEvent.Cancelled -> {}
     }
   }
 
-  private fun event(id: String, type: String): WritableMap =
-    Arguments.createMap().apply {
-      putString("id", id)
-      putString("type", type)
-    }
-
   private fun emit(params: WritableMap) {
+    if (!reactContext.hasActiveReactInstance()) return
     reactContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit(EVENT, params)

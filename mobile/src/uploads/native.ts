@@ -2,6 +2,20 @@ import { NativeEventEmitter, NativeModules } from 'react-native';
 import { API_BASE_URL } from '../config';
 import { currentToken } from '../lib/auth-token';
 
+/** One row of the durable native queue, as returned by getQueue() on app start. */
+export interface NativeQueueItem {
+  id: string;
+  uri: string;
+  name: string;
+  size: number;
+  lastModified: number;
+  folder: string;
+  /** Native status: 'pending' | 'running' | 'done' | 'error' | 'cancelled'. */
+  status: string;
+  uploaded: number;
+  error?: string;
+}
+
 /** The native uploader module (Kotlin). Untyped over the bridge, wrapped with types here. */
 const Native = NativeModules.PocketDriveUploader as {
   enqueue(
@@ -15,6 +29,12 @@ const Native = NativeModules.PocketDriveUploader as {
     token: string,
   ): void;
   cancel(id: string): void;
+  retry(id: string): void;
+  remove(id: string): void;
+  clearFinished(): void;
+  getQueue(): Promise<NativeQueueItem[]>;
+  getWifiOnly(): Promise<boolean>;
+  setWifiOnly(value: boolean): void;
   download(url: string, filename: string, mimeType: string, token: string): Promise<boolean>;
   addListener(event: string): void;
   removeListeners(count: number): void;
@@ -45,6 +65,35 @@ export function enqueueUpload(item: UploadItem) {
 
 export function cancelUpload(id: string) {
   Native.cancel(id);
+}
+
+/** Requeue a failed/cancelled upload (native re-schedules the drainer). */
+export function retryUpload(id: string) {
+  Native.retry(id);
+}
+
+/** Drop a finished/cancelled row from the native queue. */
+export function removeUpload(id: string) {
+  Native.remove(id);
+}
+
+/** Clear all done/cancelled rows from the native queue. */
+export function clearFinishedUploads() {
+  Native.clearFinished();
+}
+
+/** Read the persisted queue (used to hydrate the panel on app start). */
+export function getQueue(): Promise<NativeQueueItem[]> {
+  return Native.getQueue();
+}
+
+/** Background uploads network policy: true = Wi-Fi (unmetered) only. */
+export function getWifiOnly(): Promise<boolean> {
+  return Native.getWifiOnly();
+}
+
+export function setWifiOnly(value: boolean) {
+  Native.setWifiOnly(value);
 }
 
 /** Download a file to the device's Downloads folder (DownloadManager, with the Bearer token). */

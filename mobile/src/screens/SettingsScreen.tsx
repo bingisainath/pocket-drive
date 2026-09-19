@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api/drive';
 import { useAuth } from '../auth/AuthContext';
 import { StorageMeter } from '../components/StorageMeter';
 import { AppText, Button } from '../components/ui';
 import { useTheme } from '../theme';
+import { getWifiOnly, setWifiOnly } from '../uploads/native';
 
 export function SettingsScreen() {
   const { colors, space } = useTheme();
@@ -13,6 +15,15 @@ export function SettingsScreen() {
   const { state, signOut } = useAuth();
   const user = state.status === 'signedIn' ? state.user : null;
   const qc = useQueryClient();
+
+  const [wifiOnly, setWifiOnlyState] = useState(true);
+  useEffect(() => {
+    getWifiOnly().then(setWifiOnlyState).catch(() => {});
+  }, []);
+  const toggleWifiOnly = (value: boolean) => {
+    setWifiOnlyState(value); // native applies it to the next scheduled upload
+    setWifiOnly(value);
+  };
 
   const rescan = useMutation({
     mutationFn: () => api.rescan(),
@@ -63,8 +74,25 @@ export function SettingsScreen() {
         <Button label="Rescan storage" variant="secondary" onPress={() => rescan.mutate()} loading={rescan.isPending} />
       )}
 
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, padding: space[4] }]}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <AppText variant="body">Upload on Wi-Fi only</AppText>
+            <AppText variant="caption" tone="muted">
+              When on, background uploads wait for Wi-Fi. Turn off to use mobile data too.
+            </AppText>
+          </View>
+          <Switch
+            value={wifiOnly}
+            onValueChange={toggleWifiOnly}
+            trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+            accessibilityLabel="Upload on Wi-Fi only"
+          />
+        </View>
+      </View>
+
       <AppText variant="caption" tone="muted">
-        Uploads, camera backup, notifications and app lock arrive in later updates.
+        Camera backup, notifications and app lock arrive in later updates.
       </AppText>
 
       <Button label="Sign out" variant="secondary" onPress={signOut} />
@@ -76,4 +104,6 @@ export function SettingsScreen() {
 
 const styles = StyleSheet.create({
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, gap: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowText: { flex: 1, minWidth: 0, gap: 2 },
 });
