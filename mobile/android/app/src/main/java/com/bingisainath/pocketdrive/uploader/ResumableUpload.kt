@@ -167,6 +167,10 @@ class ResumableUpload(
     conn.readTimeout = TIMEOUT_MS
     conn.setRequestProperty("Authorization", "Bearer $token")
     conn.setRequestProperty("Accept", "application/json")
+    // Don't reuse pooled sockets: across many sequential chunk requests, a keep-alive connection
+    // that Cloudflare has already closed gets reused and fails with "unexpected end of stream".
+    // A fresh socket per request avoids that; the handshake cost is negligible beside a chunk upload.
+    conn.setRequestProperty("Connection", "close")
     return conn
   }
 

@@ -9,6 +9,9 @@ import { formatBytes, plural } from '../shared/lib/format';
 import { useTheme } from '../theme';
 import { uploads, useUploads, type UploadTask } from './store';
 
+/** Default react-navigation bottom tab bar height; the panel floats just above it. */
+const TAB_BAR_HEIGHT = 49;
+
 const percentOf = (t: UploadTask) =>
   t.size > 0 ? Math.min(100, Math.round((t.uploaded / t.size) * 100)) : t.status === 'done' ? 100 : 0;
 
@@ -41,7 +44,7 @@ export function UploadPanel() {
       : `${plural(done, 'upload')} complete`;
 
   return (
-    <View style={[styles.wrap, { bottom: insets.bottom + space[4] }]} pointerEvents="box-none">
+    <View style={[styles.wrap, { bottom: insets.bottom + TAB_BAR_HEIGHT + space[3] }]} pointerEvents="box-none">
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg }]}>
         <View style={styles.header}>
           {busy ? (
