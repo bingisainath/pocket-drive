@@ -164,8 +164,9 @@ class UploadQueue private constructor(context: Context) :
     writableDatabase.delete(TABLE, "id = ?", arrayOf(id))
   }
 
+  /** Drop everything that isn't actively in flight — done, cancelled and failed. */
   fun clearFinished() {
-    writableDatabase.delete(TABLE, "status IN (?, ?)", arrayOf(DONE, CANCELLED))
+    writableDatabase.delete(TABLE, "status IN (?, ?, ?)", arrayOf(DONE, CANCELLED, ERROR))
   }
 
   private fun query(where: String, vararg args: String): List<UploadJob> =

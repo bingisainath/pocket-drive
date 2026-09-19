@@ -38,12 +38,16 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
   fun enqueue(id: String, uri: String, name: String, size: Double, lastModified: Double, folder: String, baseUrl: String, token: String) {
     val queue = UploadQueue.get(reactContext)
     val trimmedBase = baseUrl.trimEnd('/')
+    // Trust the byte count the uploader will actually read over the one JS reported: a mismatch
+    // makes the fixed-length request body end early ("unexpected end of stream") or, if too large,
+    // never finish. The content resolver's statSize is authoritative for content:// and file:// URIs.
+    val realSize = actualSize(uri) ?: size.toLong()
     queue.insert(
       UploadJob(
         id = id,
         uri = uri,
         name = name,
-        size = size.toLong(),
+        size = realSize,
         lastModified = lastModified.toLong(),
         folder = folder,
         baseUrl = trimmedBase,
@@ -167,6 +171,12 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
   @ReactMethod fun addListener(eventName: String) {}
 
   @ReactMethod fun removeListeners(count: Double) {}
+
+  /** The real byte length the uploader will read from [uriString], or null if undeterminable. */
+  private fun actualSize(uriString: String): Long? =
+    runCatching {
+      reactContext.contentResolver.openFileDescriptor(Uri.parse(uriString), "r")?.use { it.statSize }
+    }.getOrNull()?.takeIf { it > 0 }
 
   private fun UploadJob.toMap(): WritableMap = Arguments.createMap().apply {
     putString("id", id)

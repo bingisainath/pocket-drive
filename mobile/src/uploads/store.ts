@@ -133,7 +133,7 @@ export const uploads = {
   },
   clearFinished() {
     clearFinishedUploads();
-    tasks = tasks.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
+    tasks = tasks.filter((t) => t.status === 'queued' || t.status === 'uploading' || t.status === 'reconnecting');
     emit();
   },
 };

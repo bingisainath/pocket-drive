@@ -48,12 +48,15 @@ object MediaBackup {
         val modifiedI = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
         while (c.moveToNext()) {
           val id = c.getLong(idI)
-          val size = c.getLong(sizeI)
+          val itemUri = ContentUris.withAppendedId(collection.uri, id)
+          // The MediaStore SIZE column can disagree with the bytes openInputStream actually yields
+          // (stale/recompressed media). Trust the file descriptor's real size, which is what the
+          // uploader will stream; a mismatch here caused "unexpected end of stream".
+          val size = actualSize(context, itemUri) ?: c.getLong(sizeI)
           if (size <= 0) continue // skip placeholders / pending media
           val name = if (c.isNull(nameI)) "media-$id" else c.getString(nameI)
           val dateAdded = c.getLong(addedI)
           val dateModified = c.getLong(modifiedI)
-          val itemUri = ContentUris.withAppendedId(collection.uri, id)
           queue.insert(
             UploadJob(
               id = "${collection.idPrefix}-$id",
@@ -84,4 +87,11 @@ object MediaBackup {
     }
     return count
   }
+
+  /** The real byte length the uploader will read from [uri], or null if it can't be determined. */
+  private fun actualSize(context: Context, uri: Uri): Long? =
+    runCatching {
+      context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+    }.getOrNull()?.takeIf { it > 0 }
 }
+
