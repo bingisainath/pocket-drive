@@ -32,7 +32,8 @@
            normally sets its own channel_id per message). -->
       <meta-data
         android:name="com.google.firebase.messaging.default_notification_channel_id"
-        android:value="activity" />
+        android:value="activity"
+        tools:replace="android:value" />
 
       <activity
         android:name=".MainActivity"
