@@ -140,6 +140,9 @@ dependencies {
     // Background uploads on API 24-33 (the API 34+ path uses the framework JobScheduler).
     implementation("androidx.work:work-runtime:2.9.1")
 
+    // App lock: biometric / device-credential prompt.
+    implementation("androidx.biometric:biometric:1.1.0")
+
     // Kotlin unit tests for the resumable uploader run against a local mock server, under
     // Robolectric so android's Uri and org.json are the real implementations (not stubs).
     testImplementation("junit:junit:4.13.2")

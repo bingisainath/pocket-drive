@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { StorageMeter } from '../components/StorageMeter';
 import { AppText, Button } from '../components/ui';
 import { useTheme } from '../theme';
+import { canAuthenticate, isAppLockEnabled, setAppLockEnabled } from '../lock/appLock';
 import { disableCameraBackup, enableCameraBackup } from '../uploads/cameraBackup';
 import { getCameraBackup, getWifiOnly, setWifiOnly } from '../uploads/native';
 
@@ -28,6 +29,21 @@ export function SettingsScreen() {
     setWifiOnlyState(value); // native applies it to the next scheduled upload
     setWifiOnly(value);
   };
+  const [appLock, setAppLockState] = useState(isAppLockEnabled());
+  const toggleAppLock = async (value: boolean) => {
+    if (value) {
+      if (!(await canAuthenticate())) {
+        Alert.alert('App lock', 'Set up a screen lock (PIN, pattern, or fingerprint) in your device settings first.');
+        return;
+      }
+      setAppLockEnabled(true);
+      setAppLockState(true);
+    } else {
+      setAppLockEnabled(false);
+      setAppLockState(false);
+    }
+  };
+
   const toggleCameraBackup = async (value: boolean) => {
     setSavingBackup(true);
     try {
@@ -128,9 +144,22 @@ export function SettingsScreen() {
         </View>
       </View>
 
-      <AppText variant="caption" tone="muted">
-        Camera backup, notifications and app lock arrive in later updates.
-      </AppText>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, padding: space[4] }]}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <AppText variant="body">Require unlock</AppText>
+            <AppText variant="caption" tone="muted">
+              Ask for your fingerprint or PIN each time you open Pocket Drive.
+            </AppText>
+          </View>
+          <Switch
+            value={appLock}
+            onValueChange={toggleAppLock}
+            trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+            accessibilityLabel="Require unlock"
+          />
+        </View>
+      </View>
 
       <Button label="Sign out" variant="secondary" onPress={signOut} />
 
