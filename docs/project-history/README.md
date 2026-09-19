@@ -48,6 +48,7 @@ All times are UTC. Measurements were taken on the phone itself unless stated oth
 | 9 | [Issues log](09-issues-log.md) | Every problem hit, its root cause and fix, in one table |
 | 10 | [Benchmarks](10-benchmarks.md) | Every measurement, grouped by topic |
 | 11 | [Open items and lessons learned](11-open-items-and-lessons.md) | What's still to do, known limits, and engineering lessons |
+| 12 | [The Android app](12-android-app.md) | Native app: background uploads, push, camera backup, app lock, release prep, and the bugs fixed along the way |
 
 ## Timeline
 
