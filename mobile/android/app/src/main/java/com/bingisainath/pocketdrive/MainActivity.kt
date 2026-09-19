@@ -2,6 +2,7 @@ package com.bingisainath.pocketdrive
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.bingisainath.pocketdrive.uploader.SharedImport
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -17,6 +18,8 @@ class MainActivity : ReactActivity() {
   override fun getMainComponentName(): String = "PocketDrive"
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    // Must run before super.onCreate to swap the splash theme out for AppTheme.
+    installSplashScreen()
     super.onCreate(savedInstanceState)
     // Files shared into the app (launch intent). JS picks these up via getSharedFiles().
     SharedImport.capture(intent)

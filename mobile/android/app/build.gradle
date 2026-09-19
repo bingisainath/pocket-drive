@@ -145,6 +145,9 @@ dependencies {
     // App lock: biometric / device-credential prompt.
     implementation("androidx.biometric:biometric:1.1.0")
 
+    // Splash screen (backported to older Android versions).
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
     // Kotlin unit tests for the resumable uploader run against a local mock server, under
     // Robolectric so android's Uri and org.json are the real implementations (not stubs).
     testImplementation("junit:junit:4.13.2")
