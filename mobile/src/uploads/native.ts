@@ -15,6 +15,7 @@ const Native = NativeModules.PocketDriveUploader as {
     token: string,
   ): void;
   cancel(id: string): void;
+  download(url: string, filename: string, mimeType: string, token: string): Promise<boolean>;
   addListener(event: string): void;
   removeListeners(count: number): void;
 };
@@ -44,6 +45,11 @@ export function enqueueUpload(item: UploadItem) {
 
 export function cancelUpload(id: string) {
   Native.cancel(id);
+}
+
+/** Download a file to the device's Downloads folder (DownloadManager, with the Bearer token). */
+export function downloadFile(url: string, filename: string, mimeType: string | null): Promise<boolean> {
+  return Native.download(url, filename, mimeType ?? '', currentToken() ?? '');
 }
 
 /** Subscribe to progress/done/error/cancelled events; returns an unsubscribe function. */

@@ -1,7 +1,11 @@
 package com.bingisainath.pocketdrive.uploader
 
+import android.app.DownloadManager
+import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -41,6 +45,26 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
   @ReactMethod
   fun cancel(id: String) {
     uploads[id]?.cancel()
+  }
+
+  /** Download a file to the public Downloads folder via Android's DownloadManager (no permission
+   *  needed), sending the Bearer token. Shows a system download notification. */
+  @ReactMethod
+  fun download(url: String, filename: String, mimeType: String, token: String, promise: Promise) {
+    try {
+      val request = DownloadManager.Request(Uri.parse(url))
+        .addRequestHeader("Authorization", "Bearer $token")
+        .setTitle(filename)
+        .setDescription("Pocket Drive")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+      if (mimeType.isNotEmpty()) request.setMimeType(mimeType)
+      val dm = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+      dm.enqueue(request)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("download_failed", e.message ?: "Download failed", e)
+    }
   }
 
   // Required so JS NativeEventEmitter is happy on both architectures.

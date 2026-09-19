@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
-import { ArrowUpDown, Check, FileUp, FolderOpen, FolderPlus, ImageUp, LayoutGrid, List, Plus, Search, Trash2, UserPlus } from 'lucide-react-native';
+import { ArrowUpDown, Check, Download, FileUp, FolderOpen, FolderPlus, ImageUp, LayoutGrid, List, Plus, Search, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
@@ -15,8 +15,10 @@ import type { FilesStackParamList } from '../navigation/types';
 import { SORT_LABELS, SORTS } from '../shared/lib/entries';
 import type { Entry } from '../shared/types';
 import { useTheme } from '../theme';
+import { downloadFile } from '../uploads/native';
 import { pickDocuments, pickPhotos } from '../uploads/pick';
 import { uploads } from '../uploads/store';
+import { urls } from '../api/drive';
 
 type Props = NativeStackScreenProps<FilesStackParamList, 'Folder'>;
 
@@ -58,6 +60,13 @@ export function FolderScreen({ navigation, route }: Props) {
         { text: 'Delete', style: 'destructive', onPress: () => remove.mutate(entry.id) },
       ],
     );
+  };
+
+  const downloadEntry = (entry: Entry) => {
+    setActionEntry(null);
+    downloadFile(urls.download(entry), entry.name, entry.mime)
+      .then(() => Alert.alert('Download started', `Saving “${entry.name}” to your Downloads.`))
+      .catch((err) => Alert.alert('Download failed', (err as Error).message));
   };
 
   const uploadPicked = async (pick: () => Promise<Awaited<ReturnType<typeof pickPhotos>>>) => {
@@ -230,7 +239,17 @@ export function FolderScreen({ navigation, route }: Props) {
             <AppText tone="primary">Share</AppText>
           </Pressable>
         )}
-        {actionEntry?.canDelete ? (
+        {actionEntry && !actionEntry.isDir && (
+          <Pressable
+            onPress={() => downloadEntry(actionEntry)}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.actionRow, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}
+          >
+            <Download size={20} color={colors.text} />
+            <AppText>Download</AppText>
+          </Pressable>
+        )}
+        {actionEntry?.canDelete && (
           <Pressable
             onPress={() => confirmDelete(actionEntry)}
             accessibilityRole="button"
@@ -239,12 +258,6 @@ export function FolderScreen({ navigation, route }: Props) {
             <Trash2 size={20} color={colors.danger} />
             <AppText tone="danger">Delete</AppText>
           </Pressable>
-        ) : (
-          !access?.isOwner && (
-            <AppText variant="caption" tone="muted" style={styles.noActions}>
-              Downloading and sharing are coming soon.
-            </AppText>
-          )
         )}
       </Sheet>
     </View>
@@ -262,5 +275,4 @@ const styles = StyleSheet.create({
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 76 },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 4 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 4 },
-  noActions: { paddingVertical: 12, paddingHorizontal: 4 },
 });

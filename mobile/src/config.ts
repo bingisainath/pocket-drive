@@ -9,3 +9,10 @@ export const API_BASE_URL = 'https://drive.bingisainath.com';
  * changes (or on an app release) so stale shapes are discarded rather than rehydrated.
  */
 export const APP_VERSION = '1';
+
+/**
+ * The Web OAuth 2.0 client ID (from Google Cloud, the same one the backend verifies as the token
+ * audience). Set this to enable "Continue with Google". Leave empty to hide the button.
+ * e.g. '1234-abc.apps.googleusercontent.com'
+ */
+export const GOOGLE_WEB_CLIENT_ID = '';
