@@ -66,7 +66,7 @@ sudo apt update && sudo apt install -y openjdk-17-jdk unzip android-sdk-platform
 
 # 3. Android SDK command-line tools only - no Android Studio, no emulator
 mkdir -p ~/Android/Sdk/cmdline-tools && cd ~/Android/Sdk/cmdline-tools
-curl -fsSLO https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+curl -fsSLO https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
 unzip -q commandlinetools-linux-*.zip && mv cmdline-tools latest && rm commandlinetools-linux-*.zip
 ```
 
