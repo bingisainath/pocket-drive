@@ -1,0 +1,18 @@
+diff --git a/node_modules/@thoughtbot/react-native-social-auth/android/build.gradle b/node_modules/@thoughtbot/react-native-social-auth/android/build.gradle
+index db2bdb0..1b205d1 100644
+--- a/node_modules/@thoughtbot/react-native-social-auth/android/build.gradle
++++ b/node_modules/@thoughtbot/react-native-social-auth/android/build.gradle
+@@ -19,11 +19,8 @@ buildscript {
+     mavenCentral()
+   }
+ 
+-  dependencies {
+-    classpath "com.android.tools.build:gradle:8.7.2"
+-    // noinspection DifferentKotlinGradleVersion
+-    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${getExtOrDefault('kotlinVersion')}"
+-  }
++  // The Android Gradle Plugin and Kotlin plugin are provided by the root project (RN 0.87 / AGP 9);
++  // a library must not pin its own, or the build fails with a plugin-version conflict.
+ }
+ 
+ 
