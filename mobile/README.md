@@ -51,39 +51,76 @@ mobile/
 `frontend/src/types.ts` or `frontend/src/lib/*`, copy the change here too. They can move to a shared
 package later.
 
-## Set up the laptop (Windows)
+## Set up a development machine (Ubuntu)
 
-1. **Node.js 22 LTS**, version **22.13 or newer**. React Native 0.87 requires it.
-2. **JDK 17**, e.g. Azul Zulu 17 (the version React Native's docs recommend). Set `JAVA_HOME` to it.
-3. **Android SDK:**
-   - *Android Studio* (easiest): SDK Manager → install **Android SDK Platform 37**, **Android SDK
-     Build-Tools 37.0.0**, **Android SDK Platform-Tools** and **Command-line Tools**. Gradle downloads
-     the **NDK 27.1.12297006** on first build if licences are accepted.
-   - *Low on disk?* Skip the IDE and emulator: install only the "Command line tools only" package,
-     then `sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"` and
-     `sdkmanager --licenses`.
-4. Environment variables: `ANDROID_HOME` = the SDK folder (e.g. `%LOCALAPPDATA%\Android\Sdk`), and add
-   `%ANDROID_HOME%\platform-tools` to `Path`.
-5. **Disk space, roughly:** SDK + NDK 6–8 GB, Gradle caches 3–5 GB, `node_modules` ~350 MB. Android
-   Studio itself adds ~3 GB, and an emulator several more. A **real phone over USB avoids the emulator**.
+Do this on the machine you sit at with the phone plugged in — not the home server. The app talks to
+the live backend over the internet, so the dev machine needs nothing from the server.
 
-Check everything with `npx react-native doctor` inside `mobile/`.
+```bash
+# 1. Node 22 (React Native 0.87 needs >= 22.11; the server's Node 20 is too old for this)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.nvm/nvm.sh && nvm install 22 && nvm use 22
+
+# 2. JDK 17 and the tools adb needs
+sudo apt update && sudo apt install -y openjdk-17-jdk unzip android-sdk-platform-tools-common
+
+# 3. Android SDK command-line tools only - no Android Studio, no emulator
+mkdir -p ~/Android/Sdk/cmdline-tools && cd ~/Android/Sdk/cmdline-tools
+curl -fsSLO https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip -q commandlinetools-linux-*.zip && mv cmdline-tools latest && rm commandlinetools-linux-*.zip
+```
+
+Add to `~/.bashrc`, then open a new shell:
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+```
+
+```bash
+sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+sdkmanager --licenses      # accept all; Gradle refuses to build otherwise
+```
+
+**Disk:** SDK + NDK 6-8 GB, Gradle caches 3-5 GB, `node_modules` ~350 MB. Skipping Android Studio and
+the emulator saves several GB more; a real phone over USB replaces both.
+
+Check with `npx react-native doctor` inside `mobile/`.
+
+### The Linux-only gotcha: USB permissions
+
+On Windows this is a driver install. On Linux, `adb devices` will show your phone as `no permissions`
+unless udev knows about it. `android-sdk-platform-tools-common` (installed above) provides the rules
+for most devices. If yours still shows `no permissions`:
+
+```bash
+lsusb                                   # find your phone's vendor id, e.g. 18d1 for Google
+sudo tee /etc/udev/rules.d/51-android.rules <<<'SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", MODE="0664", GROUP="plugdev"'
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG plugdev $USER          # log out and back in
+```
 
 ## Run it on your phone
 
-```powershell
+```bash
 git clone https://github.com/bingisainath/pocket-drive.git
-cd pocket-drive\mobile
+cd pocket-drive/mobile
 npm install
 ```
 
 On the phone: Settings → About phone → tap *Build number* 7 times → Developer options → **USB
 debugging** on. Connect it by USB, accept the prompt, and check `adb devices` lists it.
 
-```powershell
+```bash
 npm start                 # terminal 1: Metro (the JavaScript dev server, live reload)
 npm run android           # terminal 2: builds and installs the debug app
 ```
+
+**No USB cable?** Android 11+ can pair over Wi-Fi: on the phone, Developer options → *Wireless
+debugging* → *Pair device with pairing code*, then `adb pair <ip>:<port>` and `adb connect <ip>:<port>`.
+This also works over Tailscale, which is what makes it possible to keep the toolchain on one machine
+and the phone anywhere.
 
 **Faster first builds with less disk:** `npm run android -- --active-arch-only` builds native code only
 for your phone's CPU instead of all four architectures.
@@ -97,19 +134,26 @@ The debug app talks to the **live drive**, so sign in with your real owner passw
 
 ### 1. Create your upload key (once, and keep it safe)
 
-```powershell
+```bash
+mkdir -p ~/keys && cd ~/keys
 keytool -genkeypair -v -storetype PKCS12 -keystore pocketdrive-upload.keystore -alias pocketdrive-upload -keyalg RSA -keysize 2048 -validity 10000
+chmod 600 pocketdrive-upload.keystore
 ```
 
-Store `pocketdrive-upload.keystore` **outside the repository** (e.g. `C:\Users\<you>\keys\`) and back
-it up. `*.keystore` files are git-ignored, apart from the template's public debug key.
+Store it **outside the repository** and back it up somewhere you will still have in five years.
+`*.keystore` files are git-ignored, apart from the template's public debug key.
+
+This key is permanent. Google Play identifies every future update of
+`com.bingisainath.pocketdrive` by it: lose it and you cannot ship an update under the same listing,
+and there is no reset. Treat it like the only copy of a house key, not like a build artefact.
 
 ### 2. Tell Gradle where it is, outside the repo
 
-Add to `%USERPROFILE%\.gradle\gradle.properties` (create the file if needed):
+Add to `~/.gradle/gradle.properties` (create the file if needed, and `chmod 600` it - it holds
+passwords):
 
 ```properties
-POCKETDRIVE_UPLOAD_STORE_FILE=C:/Users/<you>/keys/pocketdrive-upload.keystore
+POCKETDRIVE_UPLOAD_STORE_FILE=/home/<you>/keys/pocketdrive-upload.keystore
 POCKETDRIVE_UPLOAD_KEY_ALIAS=pocketdrive-upload
 POCKETDRIVE_UPLOAD_STORE_PASSWORD=<your store password>
 POCKETDRIVE_UPLOAD_KEY_PASSWORD=<your key password>
@@ -121,10 +165,10 @@ Google Play.
 
 ### 3. Build
 
-```powershell
+```bash
 cd android
-.\gradlew assembleRelease   # APK → android\app\build\outputs\apk\release\app-release.apk
-.\gradlew bundleRelease     # AAB → android\app\build\outputs\bundle\release\app-release.aab
+./gradlew assembleRelease   # APK → android/app/build/outputs/apk/release/app-release.apk
+./gradlew bundleRelease     # AAB → android/app/build/outputs/bundle/release/app-release.aab
 ```
 
 Before each Play Store upload, raise `versionCode` (by 1) and `versionName` in
