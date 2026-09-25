@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+.git
+.github
+docs
+e2e
+ops
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/screenshots
+Dockerfile
+.dockerignore
