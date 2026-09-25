@@ -41,8 +41,9 @@ export function createApp(ctx) {
   });
 
   // --- API ---
-  // Public health check for uptime monitors (UptimeRobot) and the phone's watchdog. It says only
-  // whether the database answers and storage has room, nothing about the files or users.
+  // Public health check for uptime monitors, the container's HEALTHCHECK and the deploy script's
+  // post-restart gate. It says only whether the database answers and storage has room, nothing
+  // about the files or users.
   app.get('/api/health', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     let problem = null;
