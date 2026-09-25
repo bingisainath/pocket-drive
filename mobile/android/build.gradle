@@ -1,8 +1,11 @@
 buildscript {
     ext {
-        buildToolsVersion = "37.0.0"
+        buildToolsVersion = "36.1.0"
         minSdkVersion = 24
-        compileSdkVersion = 37
+        // API 37 is not released: it exists only as android-CANARY, so it cannot be installed from
+        // the stable channel, and Google Play rejects production apps compiled against a preview SDK.
+        // Nothing here needs it - the newest API the app uses is user-initiated data-transfer jobs (34).
+        compileSdkVersion = 36
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.2.0"

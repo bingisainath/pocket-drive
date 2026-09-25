@@ -9,7 +9,7 @@ and `node_modules`. Nothing here affects how the server is installed or deployed
 | App name | Pocket Drive |
 | Package (application ID) | `com.bingisainath.pocketdrive`, **permanent** once on Google Play |
 | React Native | 0.87.1 (New Architecture, Hermes) |
-| Android | minSdk 24 (Android 7), targetSdk **36** (Google Play's requirement from 31 Aug 2026), compileSdk 37 |
+| Android | minSdk 24 (Android 7), targetSdk **36** (Google Play's requirement from 31 Aug 2026), compileSdk 36 |
 | Navigation | React Navigation 7 (native stack) |
 
 ## What works already
@@ -79,7 +79,7 @@ export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-
 ```
 
 ```bash
-sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0"
 sdkmanager --licenses      # accept all; Gradle refuses to build otherwise
 ```
 
