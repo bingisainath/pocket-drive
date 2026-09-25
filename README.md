@@ -4,6 +4,11 @@ A minimal, self-hosted Google Drive for an Android phone: upload, browse, previe
 files from any device, and share folders with friends. One Node.js process serves both the API and
 the web app on a single port, so you can point `tailscale serve` / `tailscale funnel` straight at it.
 
+> It also runs on an ordinary Linux box. There is a `Dockerfile` here, and
+> [home-server](https://github.com/bingisainath/home-server) is the deployment it runs under today:
+> nginx, a Cloudflare Tunnel, monitoring and nightly backups. The phone instructions below still work —
+> that is where this started — but anywhere Node 20, ffmpeg and libheif exist will do.
+
 - **Upload** by drag-and-drop or file picker, many files at once, with per-file progress, cancel and retry.
   Files go up in resumable 16 MB chunks: a dropped connection continues where it stopped, adding the same
   file again after closing the tab resumes it, and files of any size get through Cloudflare's 100 MB
