@@ -210,30 +210,18 @@ Before each Play Store upload, raise `versionCode` (by 1) and `versionName` in
 `android/app/build.gradle`.
 
 ### 4. Google Play
-- Play Console developer account (one-time $25, identity verification) → create the app with package
-  `com.bingisainath.pocketdrive` → enrol in **Play App Signing** → upload the AAB.
+- Play Console account (one-time $25, identity verification) → create the app with package
+  `com.bingisainath.pocketdrive` → **Play App Signing** → upload the AAB.
 - **New personal developer accounts** must run a **closed test with at least 12 testers opted in for
-  14 days in a row** before they can publish to production.
-- The store listing needs a **privacy policy URL** (e.g. a page on bingisainath.com), the **Data
-  safety** form, and a way for users to **request account deletion**.
+  14 days in a row** before publishing to production.
+- Privacy policy and account deletion are already served by the backend at `/privacy` and
+  `/delete-account`; the Data safety answers are in `docs/play-store-submission.md`.
 
-## Next steps (suggested order)
+## Releasing
 
-1. **File viewer:** photo previews (`urls.preview`) with pinch-zoom and swipe, video playback using
-   `urls.stream` (HLS) with the original as fallback (Android plays HEVC natively), PDF and text.
-2. **Uploads:** pick photos with the **system photo picker** and send them with the drive's resumable
-   chunked protocol (`POST /api/uploads`, `PUT /api/uploads/:id` with `Upload-Offset`). See
-   `frontend/src/api.ts` → `uploadFile` for the client logic to port.
-3. **Folder actions:** new folder, delete with confirmation, search, sort, grid view, storage meter.
-4. **Google sign-in:** native Google Sign-In, plus a backend endpoint that verifies the Google ID token
-   and issues a session (bearer token), then accepting `Authorization: Bearer` in `requireAuth`. You'll
-   need Android OAuth client IDs with the SHA-1 of both your upload key and Play's app-signing key.
-5. **Owner tools:** Share dialog, People & access, Activity log (`/api/admin/*`).
-6. **Native extras:**
-   - background uploads (Android's user-initiated data transfer jobs)
-   - optional automatic camera backup (needs `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO`, declared as core functionality in Play Console)
-   - share-to-app from the gallery
-   - push notifications (Firebase Cloud Messaging + device-token endpoints on the backend)
+See [`docs/play-store-submission.md`](../docs/play-store-submission.md) for the full flow: the two
+signing keys and why Google Sign-In breaks after release if only one SHA-1 is registered, the Data
+safety answers, App access credentials for reviewers, and the store listing requirements.
 
 ## Known notes
 - Metro warns about an import of `ReactNativeFeatureFlags`. It comes from React Native's own list
