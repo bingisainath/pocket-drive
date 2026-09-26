@@ -101,6 +101,37 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 sudo usermod -aG plugdev $USER          # log out and back in
 ```
 
+## Before the first build: `google-services.json`
+
+The build fails at `:app:processDebugGoogleServices` without it:
+
+```
+File google-services.json is missing. The Google Services Plugin cannot function without it.
+```
+
+It is git-ignored on purpose, so a fresh clone never has it. Fetch your own copy:
+
+1. [Firebase console](https://console.firebase.google.com/) → project **pocket-drive-1b585**
+   (the FCM project; see the note below)
+2. Project settings → *Your apps* → the Android app **com.bingisainath.pocketdrive**
+3. *Download google-services.json*
+4. Save it as `mobile/android/app/google-services.json`
+
+If no Android app is registered there yet, add one with exactly that package name.
+
+### Two Google projects, and which is which
+
+This trips people up because both are "Google" and neither error says so:
+
+| | Project | Used for |
+|---|---|---|
+| Sign-in | `drive-508517` (`497807800114`) | the OAuth client and the audience the backend verifies ID tokens against |
+| Push | `pocket-drive-1b585` (`382192207138`) | FCM, and therefore `google-services.json` |
+
+So: your release signing **SHA-1 goes in the OAuth project**, while the backend's FCM service account
+must belong to the **FCM project**. Putting either in the other produces authentication failures that
+look unrelated to the mistake.
+
 ## Run it on your phone
 
 ```bash
