@@ -79,9 +79,13 @@ export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-
 ```
 
 ```bash
-sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0"
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0" "cmake;3.31.6"
 sdkmanager --licenses      # accept all; Gradle refuses to build otherwise
 ```
+
+`cmake;3.31.6` is pinned in `android/app/build.gradle`. Gradle auto-installs a *different* CMake for
+one of the dependencies, so without this the build gets all the way through compilation and then fails
+with `[CXX1300] CMake '3.31.6' was not found`.
 
 **Disk:** SDK + NDK 6-8 GB, Gradle caches 3-5 GB, `node_modules` ~350 MB. Skipping Android Studio and
 the emulator saves several GB more; a real phone over USB replaces both.
