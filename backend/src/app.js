@@ -4,6 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import { requireAuth } from './auth.js';
 import { accountDeletionPageHtml } from './deletion-page.js';
+import { privacyPolicyPageHtml } from './privacy-page.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { deviceRoutes } from './routes/devices.js';
@@ -71,6 +72,14 @@ export function createApp(ctx) {
   app.get('/delete-account', (req, res) => {
     res.set('Cache-Control', 'public, max-age=3600');
     res.type('html').send(accountDeletionPageHtml({ ownerEmail: config.ownerEmail }));
+  });
+
+  // Public privacy policy. Google Play requires a reachable URL for it, and the app links here.
+  app.get('/privacy', (req, res) => {
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.type('html').send(
+      privacyPolicyPageHtml({ ownerEmail: config.ownerEmail, activityRetentionDays: config.activityRetentionDays }),
+    );
   });
 
   // --- Built frontend (single-page app) ---

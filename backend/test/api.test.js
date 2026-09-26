@@ -149,6 +149,19 @@ test('account deletion refuses the owner and needs a session; the public page is
   assert.match(await page.text(), /Delete your Pocket Drive account/);
 });
 
+test('the privacy policy is public and states what is collected', async () => {
+  const page = await api('GET', '/privacy', { auth: false });
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html/);
+  const html = await page.text();
+  assert.match(html, /Privacy Policy/);
+  // Google Play rejects a policy that does not actually describe the data handled, so assert on the
+  // substance rather than just a 200: these are the disclosures the Data safety form is built on.
+  for (const claim of [/camera backup/i, /Firebase Cloud Messaging/, /activity log/i, /Delete your account|delete-account/]) {
+    assert.match(html, claim);
+  }
+});
+
 // --- folders ---
 
 test('create folders, list them, and reject duplicates', async () => {
