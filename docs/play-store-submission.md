@@ -59,16 +59,26 @@ profiles and no discovery. Choosing it triggers a longer questionnaire and a hig
 Everything about violence, sexual content, profanity, drugs, gambling and purchases is "no". The ones
 that need thought:
 
-| Question | Answer |
-|---|---|
-| Users can share user-generated content | **Yes** - files, but only with invited people, never publicly browsable |
-| Users can communicate with each other | **No** - no chat; notifications are one-way |
-| Shares location | No |
-| Users can share personal information | Yes, narrowly: invited members see each other's name and email |
+| Question | Answer | Why |
+|---|---|---|
+| Ratings-relevant content in the app package | **No** | the APK ships UI, icon and splash only |
+| Users can interact or exchange content (voice, text, images, audio) | **Yes** | shared folders: a contributor uploads, other members see it. No chat, but that still counts |
+| Is shared UGC the primary source of content? | **Yes** | there is no first-party content; every file is user-uploaded |
+| Permits **public** sharing of nudity | **No** | nothing is public; access needs an owner invitation |
+| Permits **public** sharing of graphic violence | **No** | same |
+| Ability to block users or content | **Yes** | the owner can revoke access and delete anything. Arguable - there is no per-user block button and non-owners cannot block. "No" is also defensible; pick on accuracy, not on the rating it produces |
+| Ability to report users or content | **No** | no reporting feature exists |
+| Chat moderation | **No** | there is no chat |
+| Can interactions be limited to invited friends only? | **Yes** | invite-only is the design, not a setting |
 
-Answer the user-generated-content question **yes**. It is tempting to say no because the files are
-private, but sharing with invited users is still sharing, and a contradiction between this and the Data
-safety form is exactly what gets flagged on a later update.
+Note the word **public** in the nudity and violence questions: they ask whether strangers can broadcast
+such content, and here nobody sees anything without an invitation.
+
+"Yes" to exchanging content has to match the Data safety form, which declares Photos/Videos and Files.
+They agree. Answering no here to look tidier is the contradiction that surfaces at the next update.
+
+Expect Teen/PEGI 12 in some regions, purely because UGC is the primary content and there is no reporting
+feature. That is normal for a private file app.
 
 ## The trap that breaks sign-in after release
 
