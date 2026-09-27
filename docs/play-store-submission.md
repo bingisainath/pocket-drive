@@ -80,6 +80,18 @@ They agree. Answering no here to look tidier is the contradiction that surfaces 
 Expect Teen/PEGI 12 in some regions, purely because UGC is the primary content and there is no reporting
 feature. That is normal for a private file app.
 
+The remaining sections are all **no**:
+
+| Question | Answer | Why |
+|---|---|---|
+| Online content: features or promotes content not in the download | **No** | the examples are catalogues the app supplies (Netflix, Spotify, Amazon). This app supplies none - the files are the user's own, already declared as UGC above. Answering yes double-counts the same thing and invites follow-ups about moderating a catalogue that does not exist |
+| Promotes or sells age-restricted products | No | |
+| Shares precise physical location with other users | **No** | the manifest declares no location permission of any kind |
+| Users can purchase digital goods | No | nothing is paid |
+| Cash rewards, gift cards, play-to-earn, crypto, NFTs | No | |
+| Web browser or search engine | **No** | the in-app search covers the user's own files; the app can only reach its own backend |
+| Primarily news or educational | No | |
+
 ## The trap that breaks sign-in after release
 
 With **Play App Signing** (default, and required for AABs) there are **two** signing keys:
