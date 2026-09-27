@@ -43,12 +43,32 @@ Notes for the reviewer-facing answers:
 | Target audience | 18+. Not designed for or directed at children |
 | Ads | No ads |
 | In-app purchases | None |
-| Content rating questionnaire | No objectionable content; user-generated content is private to the owner's drive and not publicly browsable |
+| Content rating questionnaire | Category: **All other app types**. See below |
 | Government app | No |
 | Financial features | None |
 | Data deletion | In-app, plus a public page at the URL above |
 | Photo/video permissions | `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO`: the user picks files to upload, and camera backup uploads new media after being switched on |
 | Foreground service | `dataSync`: finishing uploads the user started while the app is in the background |
+
+### Content rating: pick "All other app types"
+
+Not "Social or communication". That category is for apps whose *primary purpose* is meeting or talking
+to people. Pocket Drive shares folders with people the owner already invited; there is no messaging, no
+profiles and no discovery. Choosing it triggers a longer questionnaire and a higher rating for nothing.
+
+Everything about violence, sexual content, profanity, drugs, gambling and purchases is "no". The ones
+that need thought:
+
+| Question | Answer |
+|---|---|
+| Users can share user-generated content | **Yes** - files, but only with invited people, never publicly browsable |
+| Users can communicate with each other | **No** - no chat; notifications are one-way |
+| Shares location | No |
+| Users can share personal information | Yes, narrowly: invited members see each other's name and email |
+
+Answer the user-generated-content question **yes**. It is tempting to say no because the files are
+private, but sharing with invited users is still sharing, and a contradiction between this and the Data
+safety form is exactly what gets flagged on a later update.
 
 ## The trap that breaks sign-in after release
 
