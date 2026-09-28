@@ -113,6 +113,21 @@ not yours — and Google Sign-In checks the installed app's certificate.
 Miss the second and sign-in works perfectly in every build you test and fails for every real user — with
 nothing in your own logs to explain it.
 
+**This happened.** The first Play-signed build failed with `User cancelled the sign-in flow`
+(status 12501), which is what Google Sign-In returns when the calling app's certificate is not
+registered — it never says "wrong signature". Resolved by registering the app signing key's SHA-1.
+Three details that cost time:
+
+- The **Upload key certificate** block on the App signing page is the one you scroll to first, and it is
+  the wrong one. The **App signing key** block is above it.
+- That block offers a **Classical key** and a **Post-quantum cryptography key**. OAuth uses the classical
+  one; the PQC key is not a substitute.
+- The client must be created in **`drive-508517`**, the project owning the web client ID the app uses.
+  Adding the SHA-1 in the Firebase console instead puts it in `pocket-drive-1b585` and changes nothing.
+
+Internal testing surfaced this with one tester rather than every user on launch day. Always install the
+internal-test build on a device with no debug build present before promoting to production.
+
 ## Step 0 — check the AAB before uploading
 
 ```bash
