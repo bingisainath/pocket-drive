@@ -1,0 +1,24 @@
+Pocket Drive is a private cloud drive you host yourself.
+
+Unlike the big storage services, there is no company in the middle. The app talks only to your own server, and only people you personally invite can see anything. Nothing is scanned, nothing is profiled, and there are no ads.
+
+UPLOAD WITHOUT BABYSITTING IT
+Uploads keep going when you leave the app, lock your phone or restart it. Large files resume from where they stopped instead of starting again, and you can choose to upload only on Wi-Fi.
+
+CAMERA BACKUP, IF YOU WANT IT
+Turn it on and new photos and videos are backed up to your own drive automatically. It is off until you enable it, and it only ever uploads media added afterwards - it will not sweep up your whole gallery.
+
+BROWSE AND VIEW
+A thumbnail grid or a list, folders, breadcrumbs, search and sorting. Open photos, play videos, read PDFs and text files without downloading them first.
+
+SHARE WITH PEOPLE YOU CHOOSE
+Share a folder with someone and pick what they can do: view, contribute or edit. The owner sees an activity log of everything that happened.
+
+STAYS PRIVATE
+Lock the app behind your fingerprint, face or device PIN. Everything travels over HTTPS, and your files sit on hardware you control rather than someone else's cloud.
+
+SHARE INTO IT
+Send files to Pocket Drive from any other app using the normal Android share sheet.
+
+NOTE
+Pocket Drive needs a Pocket Drive server, which you run yourself. It is open source: github.com/bingisainath/pocket-drive
