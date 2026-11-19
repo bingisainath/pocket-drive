@@ -33,6 +33,21 @@ object UploadScheduler {
     }
   }
 
+  /**
+   * Re-apply the network policy (Wi-Fi only on/off) to work that is waiting to start. A drain that is
+   * already running keeps going and the next one uses the new policy.
+   */
+  fun reschedule(context: Context) {
+    val app = context.applicationContext
+    if (UploadRunner.isDraining) return
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      app.getSystemService(JobScheduler::class.java).cancel(JOB_ID)
+    } else {
+      WorkManager.getInstance(app).cancelUniqueWork(WORK_NAME)
+    }
+    schedule(app)
+  }
+
   private fun scheduleJob(app: Context) {
     val scheduler = app.getSystemService(JobScheduler::class.java)
     if (scheduler.getPendingJob(JOB_ID) != null) return // already scheduled or running

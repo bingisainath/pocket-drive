@@ -14,6 +14,9 @@ sealed class UploadEvent(val id: String, val type: String) {
   class Failed(id: String, val message: String) : UploadEvent(id, "error")
   class Cancelled(id: String) : UploadEvent(id, "cancelled")
 
+  /** Android stopped the job (network lost, or Wi-Fi-only on mobile data): it resumes when allowed. */
+  class Paused(id: String) : UploadEvent(id, "paused")
+
   /** The source file was deleted, so the job was dropped without uploading — remove it from the UI. */
   class Removed(id: String) : UploadEvent(id, "removed")
 }
@@ -30,6 +33,8 @@ sealed class UploadEvent(val id: String, val type: String) {
 object UploadRunner {
   private const val MAX_ACTIVE = 4
   private const val NOTIFY_THROTTLE_MS = 700L
+  /** How often in-flight progress is written to SQLite; chunk boundaries are what resuming relies on. */
+  private const val SAVE_THROTTLE_MS = 2_000L
 
   private val runLock = ReentrantLock()
   private val active = ConcurrentHashMap<String, ResumableUpload>()
@@ -43,6 +48,9 @@ object UploadRunner {
   @Volatile var listener: ((UploadEvent) -> Unit)? = null
 
   fun hasWork(context: Context): Boolean = UploadQueue.get(context).hasUnfinished()
+
+  /** True while a drain loop is running (a job or worker is executing right now). */
+  val isDraining: Boolean get() = runLock.isLocked
 
   /** Run until no pending jobs remain (or a stop is requested). Blocks the caller. */
   fun drain(context: Context) {
@@ -114,8 +122,14 @@ object UploadRunner {
     )
     active[job.id] = upload
     val callbacks = object : ResumableUpload.Callbacks {
+      private var savedAt = 0L
+
       override fun onProgress(uploaded: Long, total: Long) {
-        queue.setProgress(job.id, uploaded, null)
+        val now = System.currentTimeMillis()
+        if (now - savedAt >= SAVE_THROTTLE_MS || uploaded >= total) {
+          savedAt = now
+          queue.setProgress(job.id, uploaded, null)
+        }
         emit(UploadEvent.Progress(job.id, uploaded, total))
         pushNotification(app, force = false)
       }
@@ -136,6 +150,7 @@ object UploadRunner {
       } else {
         // A preemption, not a user cancel: keep the partial upload and let it resume next run.
         queue.setStatus(job.id, UploadQueue.PENDING)
+        emit(UploadEvent.Paused(job.id))
       }
     } catch (e: ResumableUpload.SourceMissingException) {
       // Deleted mid-upload: abandon the server session and drop the job silently.

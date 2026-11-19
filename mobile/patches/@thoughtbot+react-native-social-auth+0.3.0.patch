@@ -16,3 +16,62 @@ index db2bdb0..1b205d1 100644
  }
  
  
+diff --git a/node_modules/@thoughtbot/react-native-social-auth/android/src/main/java/com/thoughtbot/reactnativesocialauth/GoogleSignInModule.kt b/node_modules/@thoughtbot/react-native-social-auth/android/src/main/java/com/thoughtbot/reactnativesocialauth/GoogleSignInModule.kt
+index 10310ee..f93428a 100644
+--- a/node_modules/@thoughtbot/react-native-social-auth/android/src/main/java/com/thoughtbot/reactnativesocialauth/GoogleSignInModule.kt
++++ b/node_modules/@thoughtbot/react-native-social-auth/android/src/main/java/com/thoughtbot/reactnativesocialauth/GoogleSignInModule.kt
+@@ -12,7 +12,7 @@ import com.facebook.react.bridge.Arguments
+ import com.facebook.react.bridge.Promise
+ import com.facebook.react.bridge.ReactApplicationContext
+ import com.facebook.react.bridge.ReadableMap
+-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
++import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+@@ -66,37 +66,23 @@ class GoogleSignInModule(reactContext: ReactApplicationContext) :
+     }
+   }
+ 
++  // Pocket Drive: the button always opens Google's full "Sign in with Google" screen, which lists
++  // every account on the phone and offers "Add another account". The quick bottom-sheet picker
++  // (GetGoogleIdOption) this used before only shows accounts already on the device, and auto-selects
++  // the last one, so there was no way to sign in with a different Google account.
+   private suspend fun getCredentialWithAutoSignIn(
+     clientId: String,
+     activity: android.app.Activity
+   ): GetCredentialResponse {
+-    val autoSignInOption = GetGoogleIdOption.Builder()
+-      .setFilterByAuthorizedAccounts(true)
+-      .setServerClientId(clientId)
+-      .setAutoSelectEnabled(true)
++    val option = GetSignInWithGoogleOption.Builder(clientId)
+       .apply { nonce?.let { setNonce(it) } }
+       .build()
+ 
+-    val autoRequest = GetCredentialRequest.Builder()
+-      .addCredentialOption(autoSignInOption)
++    val request = GetCredentialRequest.Builder()
++      .addCredentialOption(option)
+       .build()
+ 
+-    return try {
+-      credentialManager.getCredential(activity, autoRequest)
+-    } catch (e: NoCredentialException) {
+-      val fallbackOption = GetGoogleIdOption.Builder()
+-        .setFilterByAuthorizedAccounts(false)
+-        .setServerClientId(clientId)
+-        .setAutoSelectEnabled(false)
+-        .apply { nonce?.let { setNonce(it) } }
+-        .build()
+-
+-      val fallbackRequest = GetCredentialRequest.Builder()
+-        .addCredentialOption(fallbackOption)
+-        .build()
+-
+-      credentialManager.getCredential(activity, fallbackRequest)
+-    }
++    return credentialManager.getCredential(activity, request)
+   }
+ 
+   private fun handleSignInResult(result: GetCredentialResponse, promise: Promise) {

@@ -95,7 +95,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Bump versionCode on every Play upload (must strictly increase); versionName is the
         // human-facing release, e.g. 1.0.0.
-        versionCode 1
+        versionCode 4
         versionName "1.0.0"
     }
     signingConfigs {

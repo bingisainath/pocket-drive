@@ -11,7 +11,7 @@ const Stack = createNativeStackNavigator<FilesStackParamList>();
 
 /** The Files tab: a native stack you drill down through, folder by folder. */
 export function FilesStack() {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const { state } = useAuth();
   const isOwner = state.status === 'signedIn' && state.user.isOwner;
 
@@ -21,6 +21,8 @@ export function FilesStack() {
         headerStyle: { backgroundColor: colors.surface },
         headerTitleStyle: { color: colors.text },
         headerTintColor: colors.primary,
+        // Set per screen so leaving the (always dark) viewer restores the right status bar icons.
+        statusBarStyle: dark ? 'light' : 'dark',
       }}
     >
       <Stack.Screen

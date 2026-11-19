@@ -7,7 +7,6 @@ import {
   onMessage,
   onNotificationOpenedApp,
   onTokenRefresh,
-  requestPermission,
 } from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { api } from '../api/drive';
@@ -70,12 +69,12 @@ async function displayForeground(message: RemoteMessage) {
 }
 
 /**
- * One-time setup: channels, notification permission, and the message/tap handlers. Returns an
- * unsubscribe function. Safe to call regardless of auth (taps must work before/after sign-in).
+ * One-time setup: channels and the message/tap handlers. Returns an unsubscribe function. Safe to
+ * call regardless of auth (taps must work before/after sign-in). The notification permission is
+ * asked for by NotificationPrompt, with an explanation, once signed in.
  */
 export async function configurePush(): Promise<() => void> {
   await ensureChannels();
-  await requestPermission(messaging()); // prompts for POST_NOTIFICATIONS on Android 13+
 
   const unsubMessage = onMessage(messaging(), displayForeground);
   const unsubOpened = onNotificationOpenedApp(messaging(), (m) => openFrom(m.data as PushData));

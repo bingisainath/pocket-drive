@@ -118,6 +118,7 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
   @ReactMethod
   fun setWifiOnly(value: Boolean) {
     UploadSettings.setWifiOnly(reactContext, value)
+    UploadScheduler.reschedule(reactContext) // e.g. uploads waiting for Wi-Fi start on mobile data now
   }
 
   @ReactMethod
@@ -203,6 +204,7 @@ class PocketDriveUploaderModule(private val reactContext: ReactApplicationContex
       is UploadEvent.Failed -> putString("message", message)
       is UploadEvent.Cancelled -> {}
       is UploadEvent.Removed -> {}
+      is UploadEvent.Paused -> {}
     }
   }
 

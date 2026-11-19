@@ -9,12 +9,14 @@ interface Props {
   onPress: () => void;
   size?: number;
   tone?: keyof Pick<Colors, 'text' | 'muted' | 'primary' | 'danger'>;
+  /** A fixed colour instead of a theme tone (e.g. white over a photo). */
+  color?: string;
   disabled?: boolean;
   style?: ViewStyle;
 }
 
 /** A tappable icon with a proper touch target and screen-reader label. */
-export function IconButton({ icon: Icon, accessibilityLabel, onPress, size = 22, tone = 'text', disabled = false, style }: Props) {
+export function IconButton({ icon: Icon, accessibilityLabel, onPress, size = 22, tone = 'text', color, disabled = false, style }: Props) {
   const { colors } = useTheme();
   return (
     <Pressable
@@ -26,7 +28,7 @@ export function IconButton({ icon: Icon, accessibilityLabel, onPress, size = 22,
       hitSlop={8}
       style={({ pressed }) => [styles.base, { opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }, style]}
     >
-      <Icon size={size} color={colors[tone]} />
+      <Icon size={size} color={color ?? colors[tone]} />
     </Pressable>
   );
 }

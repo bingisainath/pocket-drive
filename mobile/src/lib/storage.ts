@@ -19,6 +19,8 @@ export const StorageKey = {
   lastUser: 'auth.lastUser',
   /** string — this device's FCM push token, kept so we can unregister it on sign-out. */
   pushToken: 'push.token',
+  /** number (ms) — when "Not now" was tapped on the notification prompt, to wait before asking again. */
+  notificationPromptSnoozedAt: 'push.promptSnoozedAt',
 } as const;
 
 /** Remove everything in {@link storage} — used on sign-out and user change. */

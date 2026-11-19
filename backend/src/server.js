@@ -31,6 +31,11 @@ const server = createApp(ctx).listen(config.port, config.host, (err) => {
   else if (config.google.clientId) {
     console.log('  Google sign-in: OFF — also set OWNER_EMAIL and PUBLIC_ORIGINS (and GOOGLE_CLIENT_SECRET)');
   } else console.log('  Google sign-in: not set up (owner password only)');
+  console.log(
+    ctx.fcm.enabled
+      ? '  Push notifications: on'
+      : '  Push notifications: OFF — set FCM_SERVICE_ACCOUNT_FILE to a Firebase service-account JSON',
+  );
   ctx.scanner
     .run()
     .then((r) => console.log(`Index synced with disk (+${r.added} ~${r.updated} -${r.removed})`))

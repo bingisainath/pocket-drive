@@ -28,7 +28,7 @@ export function SearchScreen({ navigation }: Props) {
 
   const open = (entry: Entry) => {
     if (entry.isDir) navigation.push('Folder', { path: entry.path, title: entry.name });
-    else navigation.push('Viewer', { entry });
+    else navigation.push('Viewer', { entry, siblings: entries });
   };
 
   return (

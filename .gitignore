@@ -25,3 +25,6 @@ fcm-service-account*.json
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+
+# Personal study notes (not part of the project)
+learning/

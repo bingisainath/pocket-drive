@@ -38,7 +38,7 @@ export function Sheet({ visible, onClose, title, children }: Props) {
         >
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           {title && (
-            <AppText variant="subtitle" style={styles.title}>
+            <AppText variant="subtitle" numberOfLines={2} style={styles.title}>
               {title}
             </AppText>
           )}

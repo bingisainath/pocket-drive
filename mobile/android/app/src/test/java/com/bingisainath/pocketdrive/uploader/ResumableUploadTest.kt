@@ -5,6 +5,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -139,6 +140,35 @@ class ResumableUploadTest {
     assertEquals("photo.jpg", file.getString("name"))
     assertEquals("POST", server.takeRequest().method)
     assertEquals("PUT", server.takeRequest().method) // 503
+    assertEquals("GET", server.takeRequest().method) // offset probe
+    assertEquals("PUT", server.takeRequest().method)
+  }
+
+  @Test
+  fun `a dropped connection while opening the session is retried`() {
+    feed(8)
+    server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+    server.enqueue(open("A", 0, 8))
+    server.enqueue(finished())
+
+    val file = upload(8).run(noop)
+
+    assertEquals("photo.jpg", file.getString("name"))
+  }
+
+  @Test
+  fun `a connection dropped mid-chunk resumes instead of failing`() {
+    feed(8)
+    server.enqueue(open("A", 0, 8))
+    server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+    server.enqueue(offset(0)) // GET current offset after backoff
+    server.enqueue(finished())
+
+    val file = upload(8).run(noop)
+
+    assertEquals("photo.jpg", file.getString("name"))
+    assertEquals("POST", server.takeRequest().method)
+    assertEquals("PUT", server.takeRequest().method) // dropped
     assertEquals("GET", server.takeRequest().method) // offset probe
     assertEquals("PUT", server.takeRequest().method)
   }

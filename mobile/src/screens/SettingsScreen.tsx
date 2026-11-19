@@ -9,7 +9,8 @@ import { AppText, Button } from '../components/ui';
 import { useTheme } from '../theme';
 import { canAuthenticate, isAppLockEnabled, setAppLockEnabled } from '../lock/appLock';
 import { disableCameraBackup, enableCameraBackup } from '../uploads/cameraBackup';
-import { getCameraBackup, getWifiOnly, setWifiOnly } from '../uploads/native';
+import { getCameraBackup } from '../uploads/native';
+import { setWifiOnly, useWifiOnly } from '../uploads/network';
 
 export function SettingsScreen() {
   const { colors, space } = useTheme();
@@ -18,17 +19,12 @@ export function SettingsScreen() {
   const user = state.status === 'signedIn' ? state.user : null;
   const qc = useQueryClient();
 
-  const [wifiOnly, setWifiOnlyState] = useState(true);
+  const wifiOnly = useWifiOnly();
   const [cameraBackup, setCameraBackupState] = useState(false);
   const [savingBackup, setSavingBackup] = useState(false);
   useEffect(() => {
-    getWifiOnly().then(setWifiOnlyState).catch(() => {});
     getCameraBackup().then((s) => setCameraBackupState(s.enabled)).catch(() => {});
   }, []);
-  const toggleWifiOnly = (value: boolean) => {
-    setWifiOnlyState(value); // native applies it to the next scheduled upload
-    setWifiOnly(value);
-  };
   const [appLock, setAppLockState] = useState(isAppLockEnabled());
   const toggleAppLock = async (value: boolean) => {
     if (value) {
@@ -116,12 +112,12 @@ export function SettingsScreen() {
           <View style={styles.rowText}>
             <AppText variant="body">Upload on Wi-Fi only</AppText>
             <AppText variant="caption" tone="muted">
-              When on, background uploads wait for Wi-Fi. Turn off to use mobile data too.
+              When on, uploads wait for Wi-Fi and pause on mobile data. Turn off to upload on mobile data too.
             </AppText>
           </View>
           <Switch
             value={wifiOnly}
-            onValueChange={toggleWifiOnly}
+            onValueChange={setWifiOnly}
             trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
             accessibilityLabel="Upload on Wi-Fi only"
           />

@@ -58,6 +58,7 @@ export type UploadEvent =
   | { id: string; type: 'done'; file: string }
   | { id: string; type: 'error'; message: string }
   | { id: string; type: 'cancelled' }
+  | { id: string; type: 'paused' }
   | { id: string; type: 'removed' };
 
 export interface UploadItem {

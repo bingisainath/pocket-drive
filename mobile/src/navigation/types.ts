@@ -6,7 +6,8 @@ export type FilesStackParamList = {
   /** `path` is relative to the drive root ('' = My Drive, or "Shared with me" for members). */
   Folder: { path: string; title: string };
   Search: undefined;
-  Viewer: { entry: Entry };
+  /** `siblings`: the list it was opened from, so the viewer can swipe through its photos and videos. */
+  Viewer: { entry: Entry; siblings?: Entry[] };
   Share: { path: string; name: string };
 };
 

@@ -13,13 +13,15 @@ interface Props {
   message?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Background colour; defaults to the app background. Pass the surrounding screen's colour to blend in. */
+  background?: string;
 }
 
 /** Full-screen loading, empty and error states — the one place these are styled. */
-export function EmptyState({ icon: Icon, loading, title, message, actionLabel, onAction }: Props) {
+export function EmptyState({ icon: Icon, loading, title, message, actionLabel, onAction, background }: Props) {
   const { colors, space } = useTheme();
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, padding: space[6], gap: space[2] }]}>
+    <View style={[styles.container, { backgroundColor: background ?? colors.background, padding: space[6], gap: space[2] }]}>
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (

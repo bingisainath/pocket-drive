@@ -88,8 +88,13 @@ function wire() {
     .catch(() => {});
 
   onUploadEvent((e: UploadEvent) => {
-    if (e.type === 'progress') return patch(e.id, { status: 'uploading', uploaded: e.uploaded });
+    // `total` is the size native actually reads, which can differ from what the picker reported.
+    if (e.type === 'progress') {
+      return patch(e.id, { status: 'uploading', uploaded: e.uploaded, ...(e.total > 0 ? { size: e.total } : {}) });
+    }
     if (e.type === 'reconnecting') return patch(e.id, { status: e.reconnecting ? 'reconnecting' : 'uploading' });
+    // Android paused the job (network gone, or waiting for Wi-Fi); it resumes on its own.
+    if (e.type === 'paused') return patch(e.id, { status: 'queued' });
     if (e.type === 'removed') {
       // Source file was deleted before it uploaded — drop it from the panel entirely.
       tasks = tasks.filter((t) => t.id !== e.id);

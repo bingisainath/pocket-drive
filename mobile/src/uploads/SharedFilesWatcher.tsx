@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Alert, AppState } from 'react-native';
+import { AppState, ToastAndroid } from 'react-native';
 import { plural } from '../shared/lib/format';
 import { getSharedFiles } from './native';
 import { uploads } from './store';
@@ -21,7 +21,7 @@ export function SharedFilesWatcher() {
         const files = await getSharedFiles();
         if (files.length) {
           uploads.add('', files);
-          Alert.alert('Uploading', `${plural(files.length, 'file')} added to Pocket Drive.`);
+          ToastAndroid.show(`Uploading ${plural(files.length, 'file')} to Pocket Drive`, ToastAndroid.SHORT);
         }
       } catch {
         // Nothing shared, or the bridge isn't ready yet — ignore.
